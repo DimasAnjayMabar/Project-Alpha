@@ -5,10 +5,9 @@ RAG Pipeline versi harness.
 Alur:
     query
       → detect intent (product | social | knowledge)
-      → [product]   HTTP GET ke backend e-commerce → LLM
-      → [social]    LLM langsung (dengan guard rails + instructions)
-      → [knowledge] embed → ChromaDB retrieve → rerank → LLM
-                    (dengan guard rails + instructions)
+      → [product]   HTTP GET ke backend e-commerce → retrieve rules → LLM
+      → [social]    LLM langsung (dengan fallback guard rails + instructions)
+      → [knowledge] embed → ChromaDB retrieve → rerank → retrieve rules → LLM
 
 File ini TIDAK punya route. Route ada di main.py (controller harness).
 Pipeline mengembalikan RAGResponse yang siap di-serialize (dataclass).
@@ -45,10 +44,13 @@ from config import CONFIG  # noqa: E402
 load_dotenv(ROOT_DIR / ".env")
 
 logger = logging.getLogger("harness.pipeline")
+_LLM_ERROR_ANSWER = "Maaf, terjadi kesalahan saat memproses jawaban."
+
 
 # ── Konstanta dari CONFIG ───────────────────────────────────────────────
 def _resolve(p: str) -> str:
     return p if os.path.isabs(p) else str((ROOT_DIR / p).resolve())
+
 
 EMBEDDING_MODEL        = CONFIG["embedding_model"]
 RERANKER_MODEL         = CONFIG["reranker_model"]
@@ -59,6 +61,8 @@ CHROMA_PATH            = _resolve(CONFIG["chroma_path"])
 
 MAX_CHROMA_K         = int(CONFIG["max_chroma_retrieval_k"])
 RERANKED_K           = int(CONFIG["max_reranked_k"])
+INSTRUCTION_K        = int(CONFIG.get("instruction_retrieval_k", 2))
+GUARDRAILS_K         = int(CONFIG.get("guard_rails_retrieval_k", 2))
 
 KNOWLEDGE_MAX_TOKENS = int(CONFIG["knowledge_max_new_tokens"])
 KNOWLEDGE_TEMP       = float(CONFIG["knowledge_temperature"])
@@ -68,6 +72,8 @@ SOCIAL_MAX_TOKENS    = int(CONFIG["social_max_new_tokens"])
 SOCIAL_TEMP          = float(CONFIG["social_temperature"])
 SOCIAL_TOP_P         = float(CONFIG["social_top_p"])
 
+PRODUCT_MAX_TOKENS   = int(CONFIG.get("product_max_new_tokens", 350))
+
 # ── Backend e-commerce (product recommendation) ─────────────────────────
 BACKEND_BASE_URL     = os.environ.get("BACKEND_BASE_URL", "http://127.0.0.1:3002").rstrip("/")
 BACKEND_PRODUCT_PATH = CONFIG.get("backend_product_path", "/api/products/search")
@@ -76,7 +82,7 @@ PRODUCT_K            = int(CONFIG.get("product_recommendation_k", 5))
 
 
 # =========================================================================
-# FALLBACK PROMPTS (kalau koleksi ChromaDB kosong)
+# FALLBACK PROMPTS (dipakai untuk intent social atau jika koleksi kosong)
 # =========================================================================
 
 _FALLBACK_GUARD_RAILS = (
@@ -208,64 +214,18 @@ class ChromaRetriever:
 
 
 # =========================================================================
-# INSTRUCTION LOADER (dari ChromaDB)
+# HELPER KOLEKSI ATURAN (instruction & guard_rails)
 # =========================================================================
 
-def _load_collection_text(client: chromadb.ClientAPI, name: str) -> str:
-    """
-    Ambil semua dokumen dari koleksi, gabung jadi satu teks.
-
-    Sort berdasarkan (source_stem, chunk_index) agar urutan stabil antar
-    restart → prompt prefix identik → prompt caching Groq selalu match.
-
-    Kembalikan string kosong kalau koleksi tidak ada / kosong.
-    """
+def _get_optional_collection(client: chromadb.ClientAPI, name: str):
+    """Ambil handle koleksi ChromaDB jika tersedia, atau None bila belum ada."""
     try:
         col = client.get_collection(name)
+        logger.info("[Rules] Koleksi '%s' siap (%d chunk)", name, col.count())
+        return col
     except Exception:
-        logger.warning("[Instructions] Koleksi '%s' tidak ada — dilewati", name)
-        return ""
-
-    try:
-        total = col.count()
-        if total == 0:
-            logger.info("[Instructions] Koleksi '%s' kosong", name)
-            return ""
-
-        batch_size = 200
-        items: List[tuple] = []   # (source_stem, chunk_index, doc)
-        offset = 0
-        while offset < total:
-            res = col.get(
-                include=["documents", "metadatas"],
-                limit=batch_size,
-                offset=offset,
-            )
-            docs  = res.get("documents") or []
-            metas = res.get("metadatas") or []
-            for doc, meta in zip(docs, metas):
-                if not doc:
-                    continue
-                meta = meta or {}
-                items.append((
-                    meta.get("source_stem", ""),
-                    int(meta.get("chunk_index", 0)),
-                    doc,
-                ))
-            offset += batch_size
-
-        items.sort(key=lambda x: (x[0], x[1]))
-        collected = [doc for _, _, doc in items]
-
-        joined = "\n\n".join(collected).strip()
-        logger.info(
-            "[Instructions] '%s' → %d chunk, total %d karakter (urutan stabil)",
-            name, len(collected), len(joined),
-        )
-        return joined
-    except Exception:
-        logger.exception("[Instructions] Gagal load '%s'", name)
-        return ""
+        logger.warning("[Rules] Koleksi '%s' tidak ada — akan pakai fallback", name)
+        return None
 
 
 # =========================================================================
@@ -285,28 +245,17 @@ class HarnessPipeline:
         self.models = HarnessModels.get()
         self.chroma = ChromaRetriever()
 
-        # ── Load instructions + guard rails dari ChromaDB ───────────────
-        self.instructions_text = _load_collection_text(
+        # Simpan handle koleksi aturan saja (diambil top-k per query)
+        self.instruction_col = _get_optional_collection(
             self.chroma.client, INSTRUCTION_COLLECTION
         )
-        self.guard_rails_text = _load_collection_text(
+        self.guard_rails_col = _get_optional_collection(
             self.chroma.client, GUARDRAILS_COLLECTION
         )
 
-        if not self.instructions_text:
-            logger.warning(
-                "[Pipeline] instruction_collection kosong — pakai fallback hardcode"
-            )
-            self.instructions_text = _FALLBACK_INSTRUCTIONS
-        if not self.guard_rails_text:
-            logger.warning(
-                "[Pipeline] guard_rails_collection kosong — pakai fallback hardcode"
-            )
-            self.guard_rails_text = _FALLBACK_GUARD_RAILS
-
         logger.info(
-            "[Pipeline] Prompt siap — instructions=%d chars, guard_rails=%d chars",
-            len(self.instructions_text), len(self.guard_rails_text),
+            "[Pipeline] Rule retrieval aktif — instruction_k=%d, guard_rails_k=%d",
+            INSTRUCTION_K, GUARDRAILS_K,
         )
 
         # ── Cache LLM (sqlite / redis, dipilih via config) ─────────────
@@ -320,20 +269,60 @@ class HarnessPipeline:
             except Exception:
                 pass
 
+    # ── Rule retrieval ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _retrieve_rules(
+        col,
+        query_emb: List[float],
+        k: int,
+        fallback: str,
+    ) -> str:
+        """Ambil top-k chunk aturan paling relevan; fallback jika kosong/gagal."""
+        if col is None or k <= 0:
+            return fallback
+
+        try:
+            total = col.count()
+            if total == 0:
+                return fallback
+
+            res = col.query(
+                query_embeddings=[query_emb],
+                n_results=min(k, total),
+                include=["documents"],
+            )
+            docs = (res.get("documents") or [[]])[0]
+            joined = "\n\n".join(d.strip() for d in docs if d and d.strip())
+            return joined if joined else fallback
+        except Exception:
+            logger.exception("[Rules] Gagal query koleksi aturan")
+            return fallback
+
     # ── Prompt builders ────────────────────────────────────────────────
 
-    def _base_system_prompt(self) -> str:
+    def _base_system_prompt(
+        self,
+        instructions_text: str,
+        guard_rails_text: str,
+    ) -> str:
         """Bagian system prompt yang selalu ada di semua intent."""
         return (
             "=== INSTRUKSI ===\n"
-            f"{self.instructions_text}\n\n"
+            f"{instructions_text}\n\n"
             "=== GUARD RAILS ===\n"
-            f"{self.guard_rails_text}"
+            f"{guard_rails_text}"
         )
 
-    def _knowledge_system_prompt(self, context_str: str) -> str:
+    def _knowledge_system_prompt(
+        self,
+        context_str: str,
+        instructions_text: str,
+        guard_rails_text: str,
+    ) -> str:
+        base = self._base_system_prompt(instructions_text, guard_rails_text)
         return (
-            f"{self._base_system_prompt()}\n\n"
+            f"{base}\n\n"
             "=== KONTEKS DARI KNOWLEDGE BASE ===\n"
             f"{context_str}\n\n"
             "Jawab pertanyaan HANYA berdasarkan konteks di atas. "
@@ -341,9 +330,15 @@ class HarnessPipeline:
             "Jangan mengarang fakta di luar konteks."
         )
 
-    def _product_system_prompt(self, product_context: str) -> str:
+    def _product_system_prompt(
+        self,
+        product_context: str,
+        instructions_text: str,
+        guard_rails_text: str,
+    ) -> str:
+        base = self._base_system_prompt(instructions_text, guard_rails_text)
         return (
-            f"{self._base_system_prompt()}\n\n"
+            f"{base}\n\n"
             "=== DAFTAR PRODUK ===\n"
             f"{product_context}\n\n"
             "Rekomendasikan produk berikut secara ramah dan ringkas. "
@@ -352,8 +347,12 @@ class HarnessPipeline:
         )
 
     def _social_system_prompt(self) -> str:
+        # Sapaan cukup pakai fallback ringkas agar hemat token & latensi
+        base = self._base_system_prompt(
+            _FALLBACK_INSTRUCTIONS, _FALLBACK_GUARD_RAILS
+        )
         return (
-            f"{self._base_system_prompt()}\n\n"
+            f"{base}\n\n"
             "Jawab sapaan/obrolan singkat dengan santai dan singkat, "
             "lalu arahkan pengguna untuk bertanya seputar batik bila relevan."
         )
@@ -396,7 +395,7 @@ class HarnessPipeline:
             resp = self._answer_knowledge(query, t_start)
 
         # ── Simpan ke cache ────────────────────────────────────────────
-        if cache_key and resp.answer:
+        if cache_key and resp.answer and resp.answer != _LLM_ERROR_ANSWER:
             self.cache.set(
                 key=cache_key,
                 intent=intent,
@@ -439,9 +438,31 @@ class HarnessPipeline:
                 retrieval_time=http_elapsed,
             )
 
+        query_emb = self.models.embed(query)
+        instructions_text = self._retrieve_rules(
+            self.instruction_col, query_emb, min(1, INSTRUCTION_K), _FALLBACK_INSTRUCTIONS
+        )
+        guard_rails_text = self._retrieve_rules(
+            self.guard_rails_col, query_emb, min(1, GUARDRAILS_K), _FALLBACK_GUARD_RAILS
+        )
+
         product_context = self._format_products_for_llm(products)
+        system_prompt = self._product_system_prompt(
+            product_context, instructions_text, guard_rails_text
+        )
+
+        logger.info(
+            "[Product] breakdown chars | instructions=%d | guard_rails=%d | products=%d | query=%d | TOTAL=%d (~%d est. tokens)",
+            len(instructions_text),
+            len(guard_rails_text),
+            len(product_context),
+            len(query),
+            len(system_prompt) + len(query),
+            (len(system_prompt) + len(query)) // 3,
+        )
+
         messages = [
-            {"role": "system", "content": self._product_system_prompt(product_context)},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": query},
         ]
 
@@ -450,7 +471,7 @@ class HarnessPipeline:
             messages,
             temperature=0.5,
             top_p=0.9,
-            max_tokens=800,
+            max_tokens=PRODUCT_MAX_TOKENS,
         )
         gen_elapsed = time.perf_counter() - t_gen
 
@@ -640,8 +661,29 @@ class HarnessPipeline:
             f"[{i}] {c.konten_chunk}" for i, c in enumerate(top_chunks, 1)
         )
 
+        instructions_text = self._retrieve_rules(
+            self.instruction_col, query_emb, INSTRUCTION_K, _FALLBACK_INSTRUCTIONS
+        )
+        guard_rails_text = self._retrieve_rules(
+            self.guard_rails_col, query_emb, GUARDRAILS_K, _FALLBACK_GUARD_RAILS
+        )
+
+        system_prompt = self._knowledge_system_prompt(
+            context_str, instructions_text, guard_rails_text
+        )
+
+        logger.info(
+            "[Knowledge] breakdown chars | instructions=%d | guard_rails=%d | context=%d | query=%d | TOTAL=%d (~%d est. tokens)",
+            len(instructions_text),
+            len(guard_rails_text),
+            len(context_str),
+            len(query),
+            len(system_prompt) + len(query),
+            (len(system_prompt) + len(query)) // 3,
+        )
+
         messages = [
-            {"role": "system", "content": self._knowledge_system_prompt(context_str)},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": query},
         ]
 

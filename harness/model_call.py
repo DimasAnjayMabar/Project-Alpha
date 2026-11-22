@@ -23,6 +23,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
+import threading
 from typing import Dict, List, Optional
 
 import requests
@@ -60,6 +61,7 @@ class BaseLLM(ABC):
 # GROQ
 # =========================================================================
 
+# model_call.py — tambahkan `import threading` di bagian atas
 class GroqLLM(BaseLLM):
     def __init__(self, model: str, api_key: Optional[str] = None):
         from groq import Groq
@@ -69,9 +71,10 @@ class GroqLLM(BaseLLM):
             raise EnvironmentError(
                 "GROQ_API_KEY tidak ditemukan. Taruh di .env root project."
             )
-        self.model   = model
-        self.client  = Groq(api_key=key)
-        logger.info("GroqLLM ready — model=%s", model)
+        self.model  = model
+        self.client = Groq(api_key=key, max_retries=0)
+        self._lock  = threading.Lock()
+        logger.info("GroqLLM ready — model=%s (max_retries=0)", model)
 
     def generate(
         self,
@@ -80,22 +83,42 @@ class GroqLLM(BaseLLM):
         top_p:       float = 0.95,
         max_tokens:  int   = 1024,
     ) -> str:
+        total_chars = sum(len(m.get("content", "")) for m in messages)
         logger.info(
-            "[Groq] generate model=%s  max_tokens=%d  temp=%.2f  top_p=%.2f",
-            self.model, max_tokens, temperature, top_p,
+            "[Groq] generate model=%s  input_chars=%d  max_tokens=%d  temp=%.2f",
+            self.model, total_chars, max_tokens, temperature,
         )
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        if "gpt-oss" in self.model.lower():
+            kwargs["reasoning_effort"] = "low"
+
         try:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                stream=False,
-            )
+            with self._lock:
+                resp = self.client.chat.completions.create(**kwargs)
+
+            if resp.usage:
+                cached = getattr(
+                    getattr(resp.usage, "prompt_tokens_details", None),
+                    "cached_tokens",
+                    0,
+                )
+                logger.info(
+                    "[Groq] usage prompt=%d cached=%d completion=%d total=%d",
+                    resp.usage.prompt_tokens,
+                    cached or 0,
+                    resp.usage.completion_tokens,
+                    resp.usage.total_tokens,
+                )
             return resp.choices[0].message.content or ""
-        except Exception:
-            logger.exception("[Groq] generate gagal")
+        except Exception as e:
+            logger.error("[Groq] generate gagal: %s", e)
             return "Maaf, terjadi kesalahan saat memproses jawaban."
 
 
