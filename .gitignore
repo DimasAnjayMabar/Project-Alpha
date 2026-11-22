@@ -5,4 +5,5 @@ chromadb
 uploads
 cache.sqlite
 migration
-
+node_modules
+dist

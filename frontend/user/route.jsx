@@ -1,1 +1,0 @@
-// buat menyimpoan rute page (localhost:3004/web)
