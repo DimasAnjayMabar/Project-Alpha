@@ -1,5 +1,5 @@
 # storage/controller/storage_controller.py
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -12,6 +12,7 @@ from service.storage_service import (
     resolve_existing_file,
     save_display_images,
     save_mockup_image,
+    save_shop_profile_image,
 )
 
 router = APIRouter(prefix="/storage", tags=["Storage"])
@@ -46,7 +47,7 @@ def health_route():
     dependencies=[Depends(verify_internal_api_key)],
 )
 async def upload_display_route(
-    files: List[UploadFile] = File(..., description="1 atau lebih gambar galeri produk"),
+    files: List[UploadFile] = File(..., description="1 atau lebih gambar galeri produk (output WebP)"),
     prefix: Optional[str] = Form(None, description="Opsional: product_id atau slug"),
 ):
     return await controller_upload_display(files, prefix)
@@ -58,11 +59,22 @@ async def upload_display_route(
     dependencies=[Depends(verify_internal_api_key)],
 )
 async def upload_mockup_route(
-    file: UploadFile = File(..., description="1 gambar mockup 3D produk"),
+    file: UploadFile = File(..., description="1 gambar mockup 3D produk (output WebP lossless)"),
     prefix: Optional[str] = Form(None, description="Opsional: product_id atau slug"),
-    output_format: Literal["webp", "png"] = Form("webp", description="webp (lossless) atau png"),
 ):
-    return await controller_upload_mockup(file, prefix, output_format)
+    return await controller_upload_mockup(file, prefix)
+
+
+@router.post(
+    "/upload/shop-profile",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_internal_api_key)],
+)
+async def upload_shop_profile_route(
+    file: UploadFile = File(..., description="1 gambar logo/profil toko UMKM (output WebP)"),
+    prefix: Optional[str] = Form(None, description="Opsional: nama atau slug toko"),
+):
+    return await controller_upload_shop_profile(file, prefix)
 
 
 @router.post(
@@ -78,7 +90,10 @@ def delete_files_batch_route(data: DeleteFilesRequest):
     dependencies=[Depends(verify_internal_api_key)],
 )
 def delete_single_file_route(
-    path: str = Query(..., description="Path relatif file: uploads/products/..."),
+    path: str = Query(
+        ...,
+        description="Path relatif file: uploads/products/... atau uploads/shop_profile/...",
+    ),
 ):
     return controller_delete_single_file(path)
 
@@ -118,7 +133,6 @@ async def controller_upload_display(files: List[UploadFile], prefix: Optional[st
 async def controller_upload_mockup(
     file: UploadFile,
     prefix: Optional[str],
-    output_format: str,
 ):
     raw_bytes = await file.read()
     result = save_mockup_image(
@@ -126,11 +140,28 @@ async def controller_upload_mockup(
         content_type=file.content_type,
         raw_bytes=raw_bytes,
         prefix=prefix,
-        output_format=output_format,
     )
     return {
         "status": "success",
         "message": "Gambar mockup berhasil diunggah",
+        "data": result,
+    }
+
+
+async def controller_upload_shop_profile(
+    file: UploadFile,
+    prefix: Optional[str],
+):
+    raw_bytes = await file.read()
+    result = save_shop_profile_image(
+        filename=file.filename or "shop-profile",
+        content_type=file.content_type,
+        raw_bytes=raw_bytes,
+        prefix=prefix,
+    )
+    return {
+        "status": "success",
+        "message": "Logo toko berhasil diunggah",
         "data": result,
     }
 

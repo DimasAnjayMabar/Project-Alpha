@@ -12,6 +12,9 @@ import {
   X,
   Store,
   ArrowRight,
+  ChevronDown,
+  ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import { INITIAL_DATABASE } from './data/databaseSeed';
 import {
@@ -37,9 +40,14 @@ export default function UserCatalogPage({
   const db = externalDb ?? localDb;
   const setDb = onExternalDbChange ?? setLocalDb;
 
+  // State Pencarian & Filter Multi-Atribut
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('ALL');
+  const [selectedBatikType, setSelectedBatikType] = useState('ALL');
+  const [selectedMaterial, setSelectedMaterial] = useState('ALL');
   const [catalogShopTab, setCatalogShopTab] = useState('ALL');
+
+  // State Buku Katalog & Studio 3D
   const [selectedBookShopId, setSelectedBookShopId] = useState(
     () => initialFocusShopId || db.shop?.[0]?.id || INITIAL_DATABASE.shop[0].id
   );
@@ -50,8 +58,16 @@ export default function UserCatalogPage({
   const [bookPageIndex, setBookPageIndex] = useState(() => (initialFocusShopId ? 1 : 0));
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [customWaMap, setCustomWaMap] = useState({});
+
+  // State Menu & Popover Header
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [headerSearchOpen, setHeaderSearchOpen] = useState(false);
+  const [sanggarContactOpen, setSanggarContactOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+
+  const headerRef = useRef(null);
+  const headerSearchInputRef = useRef(null);
+  const jsonInputRef = useRef(null);
 
   const [gridCols, setGridCols] = useState(() => {
     if (typeof window === 'undefined') return 3;
@@ -70,7 +86,28 @@ export default function UserCatalogPage({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const jsonInputRef = useRef(null);
+  // Tutup popover header saat klik di luar atau menekan Escape
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (headerRef.current && !headerRef.current.contains(e.target)) {
+        setHeaderSearchOpen(false);
+        setSanggarContactOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setHeaderSearchOpen(false);
+        setSanggarContactOpen(false);
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const showToast = useCallback((msg) => {
     setToastMsg(msg);
@@ -102,25 +139,98 @@ export default function UserCatalogPage({
     return Math.min(...enrichedProducts.map((p) => Number(p.price) || 0));
   }, [enrichedProducts]);
 
+  // Ekstrak opsi Tipe Batik & Material/Bahan secara dinamis dari atribut produk
+  const { batikTypeOptions, materialOptions } = useMemo(() => {
+    const typeSet = new Set();
+    const matSet = new Set();
+
+    enrichedProducts.forEach((p) => {
+      (p.formattedAttributes || []).forEach((attr) => {
+        const keyLower = `${attr.name} ${attr.label}`.toLowerCase();
+        const val = String(attr.displayValue || '').trim();
+        if (!val || val === '-') return;
+
+        if (/jenis|tipe|teknik|proses/.test(keyLower)) {
+          typeSet.add(val);
+        }
+        if (/bahan|material|kain/.test(keyLower)) {
+          matSet.add(val);
+        }
+      });
+
+      // Fallback deteksi dari nama/deskripsi jika atribut eksplisit belum terisi
+      const text = `${p.name} ${p.description}`.toLowerCase();
+      if (text.includes('batik tulis') || text.includes('kain tulis')) {
+        typeSet.add('Batik Tulis');
+      }
+      if (text.includes('batik cap')) {
+        typeSet.add('Batik Cap');
+      }
+      if (text.includes('kombinasi')) {
+        typeSet.add('Batik Kombinasi');
+      }
+    });
+
+    return {
+      batikTypeOptions: Array.from(typeSet).sort((a, b) => a.localeCompare(b, 'id')),
+      materialOptions: Array.from(matSet).sort((a, b) => a.localeCompare(b, 'id')),
+    };
+  }, [enrichedProducts]);
+
+  const hasActiveFilters =
+    searchQuery.trim() !== '' ||
+    selectedCategoryId !== 'ALL' ||
+    selectedBatikType !== 'ALL' ||
+    selectedMaterial !== 'ALL' ||
+    catalogShopTab !== 'ALL';
+
+  const handleResetFilters = useCallback(() => {
+    setSearchQuery('');
+    setSelectedCategoryId('ALL');
+    setSelectedBatikType('ALL');
+    setSelectedMaterial('ALL');
+    setCatalogShopTab('ALL');
+  }, []);
+
   const groupedCatalogByShop = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
+    const typeTarget = selectedBatikType.toLowerCase();
+    const matTarget = selectedMaterial.toLowerCase();
+
     return shopBooks
       .filter((bk) => catalogShopTab === 'ALL' || bk.shop.id === catalogShopTab)
       .map((bk) => {
         const filteredProds = bk.products.filter((p) => {
           const matchCat = selectedCategoryId === 'ALL' || p.category_id === selectedCategoryId;
-          const attrText = p.formattedAttributes
+
+          const attrs = p.formattedAttributes || [];
+          const attrText = attrs
             .map((a) => `${a.label} ${a.displayValue}`)
             .join(' ')
             .toLowerCase();
-          const matchQuery =
-            !q ||
-            p.name.toLowerCase().includes(q) ||
-            p.description.toLowerCase().includes(q) ||
-            bk.shop.name.toLowerCase().includes(q) ||
-            bk.shop.address.toLowerCase().includes(q) ||
-            attrText.includes(q);
-          return matchCat && matchQuery;
+          const fullText = `${p.name} ${p.description} ${bk.shop.name} ${bk.shop.address} ${attrText}`.toLowerCase();
+
+          const matchQuery = !q || fullText.includes(q);
+
+          const matchBatikType =
+            selectedBatikType === 'ALL' ||
+            attrs.some(
+              (a) =>
+                /jenis|tipe|teknik|proses/i.test(`${a.name} ${a.label}`) &&
+                String(a.displayValue).toLowerCase().includes(typeTarget)
+            ) ||
+            `${p.name} ${p.description}`.toLowerCase().includes(typeTarget);
+
+          const matchMaterial =
+            selectedMaterial === 'ALL' ||
+            attrs.some(
+              (a) =>
+                /bahan|material|kain/i.test(`${a.name} ${a.label}`) &&
+                String(a.displayValue).toLowerCase().includes(matTarget)
+            ) ||
+            `${p.name} ${p.description}`.toLowerCase().includes(matTarget);
+
+          return matchCat && matchQuery && matchBatikType && matchMaterial;
         });
         return {
           ...bk,
@@ -128,12 +238,30 @@ export default function UserCatalogPage({
         };
       })
       .filter((bk) => bk.products.length > 0);
-  }, [shopBooks, catalogShopTab, selectedCategoryId, searchQuery]);
+  }, [
+    shopBooks,
+    catalogShopTab,
+    selectedCategoryId,
+    selectedBatikType,
+    selectedMaterial,
+    searchQuery,
+  ]);
 
   const totalFilteredCount = useMemo(
     () => groupedCatalogByShop.reduce((sum, bk) => sum + bk.products.length, 0),
     [groupedCatalogByShop]
   );
+
+  // Pratinjau cepat untuk panel Search & Browse di Header
+  const quickPreviewProducts = useMemo(() => {
+    return groupedCatalogByShop.flatMap((bk) => bk.products).slice(0, 4);
+  }, [groupedCatalogByShop]);
+
+  const jumpToEtalase = useCallback(() => {
+    setHeaderSearchOpen(false);
+    const el = document.getElementById('katalog');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   const handleJsonImport = (e) => {
     const file = e.target.files?.[0];
@@ -155,7 +283,7 @@ export default function UserCatalogPage({
           if (parsed.shop[0]) setSelectedBookShopId(parsed.shop[0].id);
           if (parsed.product[0]) setActiveProductId(parsed.product[0].id);
           setBookPageIndex(0);
-          setCatalogShopTab('ALL');
+          handleResetFilters();
           showToast(
             `Database JSON (${parsed.shop.length} sanggar, ${parsed.product.length} produk) dimuat.`
           );
@@ -224,20 +352,6 @@ export default function UserCatalogPage({
     [enrichedProducts, activeProductId]
   );
 
-  const activeSelectedShop = useMemo(
-    () => activeShops.find((s) => s.id === selectedBookShopId) || activeShops[0],
-    [activeShops, selectedBookShopId]
-  );
-
-  const navbarWaUrl = useMemo(() => {
-    if (!activeSelectedShop) return '#buku-katalog';
-    const wa = getEffectiveWa(activeSelectedShop.id, activeSelectedShop.number);
-    return buildWhatsAppUrl(
-      wa,
-      `Halo *${activeSelectedShop.name}*, saya mengunjungi katalog *Batik Wicara Trenggalek* dan ingin memesan produk Anda.`
-    );
-  }, [activeSelectedShop, getEffectiveWa]);
-
   return (
     <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] font-sans selection:bg-[#7C3219] selection:text-white">
       {toastMsg && (
@@ -251,8 +365,11 @@ export default function UserCatalogPage({
         </div>
       )}
 
-      {/* 1. NAVBAR (Opaque, fixed-feel sticky with 1px hairline) */}
-      <header className="sticky top-0 z-40 bg-[#F7F4EE] border-b border-[#1C1917]/12">
+      {/* 1. NAVBAR */}
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-40 bg-[#F7F4EE] border-b border-[#1C1917]/12"
+      >
         <div className="taste-wrap h-[72px] flex items-center justify-between gap-4">
           <a href="#konten-utama" className="skip-link">
             Lewati ke konten utama
@@ -286,7 +403,7 @@ export default function UserCatalogPage({
 
           <nav
             aria-label="Navigasi utama"
-            className="hidden md:flex items-center gap-7 text-[15px] font-medium text-[#1C1917]"
+            className="hidden lg:flex items-center gap-7 text-[15px] font-medium text-[#1C1917]"
           >
             <a href="#buku-katalog" className="taste-nav-link">
               Buku Katalog
@@ -308,34 +425,237 @@ export default function UserCatalogPage({
             )}
           </nav>
 
-          <div className="flex items-center gap-2.5">
-            <a
-              href={navbarWaUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="taste-btn-primary"
+          {/* Aksi Header: Quick Search/Browse & Daftar Kontak WA 5 Sanggar */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSanggarContactOpen(false);
+                setHeaderSearchOpen((prev) => {
+                  const next = !prev;
+                  if (next) {
+                    setTimeout(() => headerSearchInputRef.current?.focus(), 60);
+                  }
+                  return next;
+                });
+              }}
+              aria-expanded={headerSearchOpen}
+              aria-label="Cari dan filter wastra batik"
+              className={`min-h-[42px] px-3.5 py-2 rounded-md border text-[13.5px] font-medium inline-flex items-center gap-2 transition-colors cursor-pointer ${
+                headerSearchOpen || hasActiveFilters
+                  ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
+                  : 'bg-[#FCFBF8] hover:bg-[#EFEAE0] border-[#1C1917]/20 text-[#1C1917]'
+              }`}
             >
-              <MessageCircle className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">Pesan via WhatsApp</span>
-              <span className="sm:hidden">WhatsApp</span>
-            </a>
+              <Search className="w-4 h-4 text-[#7C3219] shrink-0" />
+              <span className="hidden sm:inline">Cari &amp; Filter</span>
+              {hasActiveFilters && (
+                <span className="px-1.5 py-0.5 text-[11px] rounded bg-[#7C3219] text-white tabular-nums">
+                  {totalFilteredCount}
+                </span>
+              )}
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setHeaderSearchOpen(false);
+                  setSanggarContactOpen((v) => !v);
+                }}
+                aria-expanded={sanggarContactOpen}
+                className={`min-h-[42px] px-3.5 py-2 rounded-md border text-[13.5px] font-medium inline-flex items-center gap-2 transition-colors cursor-pointer ${
+                  sanggarContactOpen
+                    ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                    : 'bg-[#FCFBF8] hover:bg-[#EFEAE0] border-[#1C1917]/20 text-[#1C1917]'
+                }`}
+              >
+                <MessageCircle
+                  className={`w-4 h-4 shrink-0 ${
+                    sanggarContactOpen ? 'text-white' : 'text-[#7C3219]'
+                  }`}
+                />
+                <span className="hidden sm:inline">Kontak Sanggar</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${
+                    sanggarContactOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {sanggarContactOpen && (
+                <div className="absolute right-0 mt-2 w-[310px] sm:w-[350px] rounded-lg bg-[#FCFBF8] border border-[#1C1917]/15 shadow-[0_18px_40px_rgba(28,25,23,0.18)] p-3 z-50 fade-panel">
+                  <div className="px-2 pb-2 mb-2 border-b border-[#1C1917]/10">
+                    <span className="text-[12px] font-medium text-[#7C3219] block">
+                      WhatsApp Langsung Perajin
+                    </span>
+                    <p className="text-[13px] text-[#575049]">
+                      Pilih sanggar UMKM yang ingin Anda hubungi:
+                    </p>
+                  </div>
+                  <div className="divide-y divide-[#1C1917]/10 max-h-72 overflow-y-auto">
+                    {activeShops.map((s) => {
+                      const waNum = getEffectiveWa(s.id, s.number);
+                      const waLink = buildWhatsAppUrl(
+                        waNum,
+                        `Halo *${s.name}*, saya mengunjungi katalog *Batik Wicara Trenggalek* dan ingin menanyakan produk batik Anda.`
+                      );
+                      return (
+                        <div
+                          key={s.id}
+                          className="py-2.5 px-2 flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <span className="text-[13.5px] font-medium text-[#1C1917] block leading-snug">
+                              {s.name}
+                            </span>
+                            <span className="text-[12px] text-[#575049] block truncate">
+                              {s.address}
+                            </span>
+                          </div>
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setSanggarContactOpen(false)}
+                            className="shrink-0 min-h-[34px] px-3 py-1 rounded-md bg-[#7C3219] hover:bg-[#632612] text-white text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>WA</span>
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
               aria-expanded={mobileMenuOpen}
               aria-label={mobileMenuOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
-              className="md:hidden min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[#1C1917] cursor-pointer"
+              className="lg:hidden min-h-[42px] min-w-[42px] inline-flex items-center justify-center rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[#1C1917] cursor-pointer"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
+        {/* Panel Quick Search & Browse di bawah Header */}
+        {headerSearchOpen && (
+          <div className="bg-[#FCFBF8] border-t border-[#1C1917]/12 shadow-[0_16px_36px_rgba(28,25,23,0.12)] fade-panel">
+            <div className="taste-wrap py-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
+                <div className="lg:col-span-5 relative">
+                  <Search className="w-4 h-4 text-[#575049] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    ref={headerSearchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && jumpToEtalase()}
+                    placeholder="Cari motif, filosofi, sanggar, atau bahan..."
+                    className="w-full min-h-[42px] pl-10 pr-4 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
+                  />
+                </div>
+
+                <div className="lg:col-span-3">
+                  <select
+                    aria-label="Filter tipe batik"
+                    value={selectedBatikType}
+                    onChange={(e) => setSelectedBatikType(e.target.value)}
+                    className="w-full min-h-[42px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] cursor-pointer"
+                  >
+                    <option value="ALL">Semua Tipe Batik</option>
+                    {batikTypeOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <select
+                    aria-label="Filter material atau bahan"
+                    value={selectedMaterial}
+                    onChange={(e) => setSelectedMaterial(e.target.value)}
+                    className="w-full min-h-[42px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] cursor-pointer"
+                  >
+                    <option value="ALL">Semua Bahan</option>
+                    {materialOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="lg:col-span-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={jumpToEtalase}
+                    className="taste-btn-primary w-full min-h-[42px] py-2"
+                  >
+                    <span>Lihat ({totalFilteredCount})</span>
+                  </button>
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      title="Reset semua filter"
+                      aria-label="Reset semua filter"
+                      className="min-h-[42px] min-w-[42px] inline-flex items-center justify-center rounded-md border border-[#1C1917]/20 bg-[#F7F4EE] hover:bg-[#EFEAE0] text-[#575049] cursor-pointer shrink-0"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Pratinjau Hasil Pencarian Langsung */}
+              {quickPreviewProducts.length > 0 && (
+                <div className="pt-2 border-t border-[#1C1917]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 flex-1">
+                    {quickPreviewProducts.map((prod) => (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => {
+                          setHeaderSearchOpen(false);
+                          handleOpenBookProduct(prod.shop.id, prod.id);
+                        }}
+                        className="p-2 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/12 flex items-center gap-2.5 text-left transition-colors cursor-pointer"
+                      >
+                        <ProductArtwork
+                          product={prod}
+                          imageUrl={prod.primaryImageUrl}
+                          size={72}
+                          className="w-10 h-10 rounded-sm shrink-0 border border-[#1C1917]/10"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-[13px] font-medium text-[#1C1917] block truncate">
+                            {prod.name}
+                          </span>
+                          <span className="text-[12px] text-[#7C3219] tabular-nums block truncate">
+                            {formatRupiah(prod.price)} · {prod.shop.name}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {mobileMenuOpen && (
           <nav
             aria-label="Navigasi ponsel"
-            className="md:hidden bg-[#F7F4EE] border-t border-[#1C1917]/12 px-5 py-3 flex flex-col divide-y divide-[#1C1917]/10 fade-panel"
+            className="lg:hidden bg-[#F7F4EE] border-t border-[#1C1917]/12 px-5 py-3 flex flex-col divide-y divide-[#1C1917]/10 fade-panel"
           >
             <a
               href="#buku-katalog"
@@ -481,7 +801,7 @@ export default function UserCatalogPage({
         <section id="katalog" className="bg-[#F7F4EE] border-t border-[#1C1917]/12 py-16 lg:py-24">
           <div className="taste-wrap">
             <FadeIn>
-              <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
+              <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 mb-6">
                 <div>
                   <span className="text-[13px] font-medium text-[#7C3219] block mb-2">
                     Direktori koleksi aktif · {enrichedProducts.length} produk
@@ -491,21 +811,69 @@ export default function UserCatalogPage({
                   </h2>
                 </div>
 
-                <div className="w-full lg:w-80">
-                  <label htmlFor="etalase-search" className="sr-only">
-                    Cari motif, sanggar, atau bahan
-                  </label>
-                  <div className="relative">
+                {/* Bar Pencarian + Filter Tipe Batik + Filter Material */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex lg:flex-wrap items-center gap-2.5">
+                  <div className="relative sm:col-span-3 lg:w-64">
+                    <label htmlFor="etalase-search" className="sr-only">
+                      Cari motif, sanggar, atau bahan
+                    </label>
                     <Search className="w-4 h-4 text-[#575049] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       id="etalase-search"
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Cari motif, sanggar, atau bahan..."
-                      className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[14px] text-[#1C1917] placeholder:text-[#575049]/75"
+                      placeholder="Cari motif, sanggar, bahan..."
+                      className="w-full min-h-[42px] pl-10 pr-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] placeholder:text-[#575049]/75"
                     />
                   </div>
+
+                  <select
+                    aria-label="Filter Tipe Batik"
+                    value={selectedBatikType}
+                    onChange={(e) => setSelectedBatikType(e.target.value)}
+                    className={`min-h-[42px] px-3 py-2 rounded-md border text-[13.5px] font-medium cursor-pointer transition-colors ${
+                      selectedBatikType !== 'ALL'
+                        ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
+                        : 'bg-[#FCFBF8] border-[#1C1917]/20 text-[#1C1917]'
+                    }`}
+                  >
+                    <option value="ALL">Tipe Batik: Semua</option>
+                    {batikTypeOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    aria-label="Filter Material atau Bahan"
+                    value={selectedMaterial}
+                    onChange={(e) => setSelectedMaterial(e.target.value)}
+                    className={`min-h-[42px] px-3 py-2 rounded-md border text-[13.5px] font-medium cursor-pointer transition-colors ${
+                      selectedMaterial !== 'ALL'
+                        ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
+                        : 'bg-[#FCFBF8] border-[#1C1917]/20 text-[#1C1917]'
+                    }`}
+                  >
+                    <option value="ALL">Material: Semua</option>
+                    {materialOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      className="min-h-[42px] px-3 py-2 rounded-md bg-[#FCFBF8] hover:bg-[#EFEAE0] border border-[#1C1917]/20 text-[13px] font-medium text-[#7C3219] inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -517,7 +885,7 @@ export default function UserCatalogPage({
                     onClick={() => setCatalogShopTab('ALL')}
                     className={`min-h-[44px] inline-flex items-center text-[14px] font-medium border-b-2 -mb-px transition-colors cursor-pointer ${
                       catalogShopTab === 'ALL'
-                        ? 'border-[#7C3219] text-[#1C1917]'
+                        ? 'border-[#7C3219] text-[#7C3219]'
                         : 'border-transparent text-[#575049] hover:text-[#1C1917]'
                     }`}
                   >
@@ -530,7 +898,7 @@ export default function UserCatalogPage({
                       onClick={() => setCatalogShopTab(bk.shop.id)}
                       className={`min-h-[44px] inline-flex items-center text-[14px] font-medium border-b-2 -mb-px transition-colors cursor-pointer ${
                         catalogShopTab === bk.shop.id
-                          ? 'border-[#7C3219] text-[#1C1917]'
+                          ? 'border-[#7C3219] text-[#7C3219]'
                           : 'border-transparent text-[#575049] hover:text-[#1C1917]'
                       }`}
                     >
@@ -539,7 +907,7 @@ export default function UserCatalogPage({
                   ))}
                 </div>
 
-                {/* Row 2: Category Filter & Result Count */}
+                {/* Row 2: Category Filter (Warna Aktif Sogan) & Result Count */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -547,8 +915,8 @@ export default function UserCatalogPage({
                       onClick={() => setSelectedCategoryId('ALL')}
                       className={`min-h-[40px] px-3.5 py-2 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                         selectedCategoryId === 'ALL'
-                          ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
-                          : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:border-[#1C1917]/35 hover:text-[#1C1917]'
+                          ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                          : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:border-[#7C3219]/40 hover:text-[#1C1917]'
                       }`}
                     >
                       Semua Kategori
@@ -560,8 +928,8 @@ export default function UserCatalogPage({
                         onClick={() => setSelectedCategoryId(cat.id)}
                         className={`min-h-[40px] px-3.5 py-2 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                           selectedCategoryId === cat.id
-                            ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
-                            : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:border-[#1C1917]/35 hover:text-[#1C1917]'
+                            ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                            : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:border-[#7C3219]/40 hover:text-[#1C1917]'
                         }`}
                       >
                         {cat.name}
@@ -570,22 +938,30 @@ export default function UserCatalogPage({
                   </div>
 
                   <span className="text-[13px] text-[#575049] tabular-nums">
-                    Menampilkan {totalFilteredCount} koleksi
+                    Menampilkan <strong className="text-[#1C1917] font-medium">{totalFilteredCount}</strong> koleksi
                   </span>
                 </div>
               </div>
             </FadeIn>
 
             {groupedCatalogByShop.length === 0 ? (
-              <div className="rounded-lg border border-[#1C1917]/15 bg-[#FCFBF8] p-12 text-center space-y-2">
+              <div className="rounded-lg border border-[#1C1917]/15 bg-[#FCFBF8] p-12 text-center space-y-3">
                 <p className="font-serif text-xl text-[#1C1917]">Koleksi tidak ditemukan</p>
                 <p className="text-[14px] text-[#575049]">
-                  Ubah kata kunci pencarian atau pilih tab &ldquo;Semua Sanggar&rdquo;.
+                  Tidak ada batik yang cocok dengan kombinasi filter saat ini.
                 </p>
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="taste-btn-secondary mt-2"
+                >
+                  <RotateCcw className="w-4 h-4 text-[#7C3219]" />
+                  <span>Reset Semua Filter</span>
+                </button>
               </div>
             ) : (
               <div
-                key={`${catalogShopTab}-${selectedCategoryId}`}
+                key={`${catalogShopTab}-${selectedCategoryId}-${selectedBatikType}-${selectedMaterial}`}
                 className="space-y-14 fade-swap"
               >
                 {groupedCatalogByShop.map((bk) => {
@@ -595,7 +971,6 @@ export default function UserCatalogPage({
                     `Halo *${bk.shop.name}*, saya melihat katalog produk Anda di *Batik Wicara Trenggalek* dan ingin menanyakan ketersediaan stok.`
                   );
 
-                  // Kelompokkan produk per baris sesuai jumlah kolom (3 di desktop, 2 di tablet, 1 di HP)
                   const productRows = [];
                   for (let i = 0; i < bk.products.length; i += gridCols) {
                     productRows.push(bk.products.slice(i, i + gridCols));
@@ -618,7 +993,20 @@ export default function UserCatalogPage({
                           </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2.5">
+                        {/* Hierarki Tombol Sanggar: Hubungi (Utama), Buku (Sekunder), Toko Online (Tautan) */}
+                        <div className="flex flex-wrap items-center gap-3">
+                          {bk.shop.online_shop && (
+                            <a
+                              href={bk.shop.online_shop}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="taste-link text-[13.5px] font-medium text-[#575049] hover:text-[#1C1917] mr-1"
+                            >
+                              <Store className="w-4 h-4 text-[#7C3219] shrink-0" />
+                              <span>Toko Online</span>
+                              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                            </a>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleOpenBookProduct(bk.shop.id, null)}
@@ -627,22 +1015,11 @@ export default function UserCatalogPage({
                             <BookOpen className="w-4 h-4 text-[#7C3219] shrink-0" />
                             <span>Buka Buku Sanggar</span>
                           </button>
-                          {bk.shop.online_shop && (
-                            <a
-                              href={bk.shop.online_shop}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="taste-btn-secondary"
-                            >
-                              <Store className="w-4 h-4 text-[#7C3219] shrink-0" />
-                              <span>Toko Online</span>
-                            </a>
-                          )}
                           <a
                             href={directShopWaUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="taste-btn-dark"
+                            className="taste-btn-primary"
                           >
                             <MessageCircle className="w-4 h-4 shrink-0" />
                             <span>Hubungi Sanggar</span>
@@ -662,6 +1039,13 @@ export default function UserCatalogPage({
                                 shopWa,
                                 prod,
                                 `Etalase ${bk.shop.name}`
+                              );
+
+                              const typeAttr = (prod.formattedAttributes || []).find((a) =>
+                                /jenis|tipe|teknik|proses/i.test(`${a.name} ${a.label}`)
+                              );
+                              const matAttr = (prod.formattedAttributes || []).find((a) =>
+                                /bahan|material|kain/i.test(`${a.name} ${a.label}`)
                               );
 
                               return (
@@ -694,6 +1078,22 @@ export default function UserCatalogPage({
                                         <h4 className="font-serif text-[20px] font-medium text-[#1C1917] leading-snug">
                                           {prod.name}
                                         </h4>
+
+                                        {/* Badge Tipe Batik & Material */}
+                                        {(typeAttr || matAttr) && (
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {typeAttr && (
+                                              <span className="taste-badge-indigo">
+                                                {typeAttr.displayValue}
+                                              </span>
+                                            )}
+                                            {matAttr && (
+                                              <span className="taste-badge-gold">
+                                                {matAttr.displayValue}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
 
                                         <p className="text-[14px] text-[#575049] line-clamp-2 leading-relaxed">
                                           {prod.description}

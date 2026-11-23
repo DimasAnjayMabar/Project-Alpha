@@ -30,19 +30,29 @@ CORS_ORIGINS = list(
     ])
 )
 
-# Direktori fisik — path relatif di DB: uploads/products/{display|mockup}/...
+# Direktori fisik — seluruh output diseragamkan ke .webp:
+# - uploads/products/display/...
+# - uploads/products/mockup/...
+# - uploads/shop_profile/...
 UPLOAD_ROOT = (BASE_DIR / "uploads").resolve()
 PRODUCT_UPLOAD_ROOT = (UPLOAD_ROOT / "products").resolve()
 DISPLAY_DIR = (PRODUCT_UPLOAD_ROOT / "display").resolve()
 MOCKUP_DIR = (PRODUCT_UPLOAD_ROOT / "mockup").resolve()
+SHOP_PROFILE_DIR = (UPLOAD_ROOT / "shop_profile").resolve()
 
-# Aturan validasi gambar
+# Aturan validasi & olahan gambar (semua disimpan sebagai WebP)
 MAX_DISPLAY_FILES_PER_REQUEST = 10
-MAX_DISPLAY_SIZE_BYTES = 5 * 1024 * 1024     # 5 MB per gambar display
-MAX_MOCKUP_SIZE_BYTES = 15 * 1024 * 1024     # 15 MB untuk mockup 3D lossless
+MAX_DISPLAY_SIZE_BYTES = 5 * 1024 * 1024        # 5 MB per gambar display
+MAX_MOCKUP_SIZE_BYTES = 15 * 1024 * 1024        # 15 MB untuk mockup 3D WebP lossless
+MAX_SHOP_PROFILE_SIZE_BYTES = 5 * 1024 * 1024   # 5 MB untuk logo/profil toko
+
 DISPLAY_MAX_DIMENSION = (1600, 1600)
 DISPLAY_WEBP_QUALITY = 82
 
+SHOP_PROFILE_MAX_DIMENSION = (512, 512)
+SHOP_PROFILE_WEBP_QUALITY = 85
+
+# Format input yang diterima saat upload sebelum dikonversi ke WebP
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/jpg",
@@ -54,3 +64,4 @@ ALLOWED_CONTENT_TYPES = {
 def ensure_storage_dirs() -> None:
     DISPLAY_DIR.mkdir(parents=True, exist_ok=True)
     MOCKUP_DIR.mkdir(parents=True, exist_ok=True)
+    SHOP_PROFILE_DIR.mkdir(parents=True, exist_ok=True)

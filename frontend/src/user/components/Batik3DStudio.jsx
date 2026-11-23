@@ -814,8 +814,8 @@ export default function Batik3DStudio({
                     onClick={() => setStudioShopFilter('ALL')}
                     className={`min-h-[38px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                       studioShopFilter === 'ALL'
-                        ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
-                        : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
+                        ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                        : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
                     }`}
                   >
                     Semua Sanggar
@@ -827,8 +827,8 @@ export default function Batik3DStudio({
                       onClick={() => setStudioShopFilter(s.id)}
                       className={`min-h-[38px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                         studioShopFilter === s.id
-                          ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
-                          : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
+                          ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                          : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
                       }`}
                     >
                       {s.name}

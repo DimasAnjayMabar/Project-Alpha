@@ -1,19 +1,16 @@
 # backend/controller/shop_controller.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from database import get_db
-from middleware import ALGORITHM, COOKIE_SECURE, SECRET_KEY
-from schemas.shop_schemas import (
-    ShopRegistrationRequest,
-    ShopStatusRequest,
-    ShopUpdateRequest,
-)
+from middleware import ALGORITHM, COOKIE_SECURE, SECRET_KEY, get_current_account_id
+from schemas.shop_schemas import ShopStatusRequest
 from service.shop_service import (
     get_my_shop,
     get_public_shop_by_id,
@@ -28,45 +25,42 @@ router = APIRouter(prefix="/shop", tags=["Shop"])
 
 
 # =========================================================================
-# AUTH DEPENDENCY (nanti dipindah ke middleware.py agar dishare ke product)
-# =========================================================================
-
-def get_current_account_id(request: Request) -> str:
-    # Pakai payload hasil decode AuthMiddleware jika sudah tersedia
-    state_user = getattr(request.state, "user", None)
-    if isinstance(state_user, dict) and state_user.get("sub"):
-        return str(state_user["sub"])
-
-    # Fallback decode cookie langsung
-    token = request.cookies.get("access_token")
-    if not token:
-        raise HTTPException(status_code=401, detail="Silakan login terlebih dahulu.")
-
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        account_id = payload.get("sub")
-        if not account_id:
-            raise HTTPException(status_code=401, detail="Token tidak valid.")
-        return str(account_id)
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Sesi login habis. Silakan login ulang.")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token tidak valid.")
-
-
-# =========================================================================
 # 1. RUTE
 # =========================================================================
 
-# --- Auth / Onboarding ---
+# --- Auth / Onboarding (multipart/form-data: teks + opsional upload logo) ---
 @router.post("/register")
-def register_route(
-    data: ShopRegistrationRequest,
+async def register_route(
     request: Request,
     response: Response,
+    name: str = Form(..., description="Nama sanggar / toko UMKM (wajib)"),
+    address: Optional[str] = Form(None, description="Alamat lengkap sanggar"),
+    number: Optional[str] = Form(None, description="Nomor WhatsApp pemesanan"),
+    instagram: Optional[str] = Form(None, description="Username atau link Instagram"),
+    online_shop: Optional[str] = Form(None, description="Link Shopee/Tokopedia"),
+    gmaps: Optional[str] = Form(None, description="Link Google Maps"),
+    description: Optional[str] = Form(None, description="Deskripsi singkat sanggar"),
+    profile_image: Optional[UploadFile] = File(
+        None,
+        description="Opsional: 1 file logo UMKM (JPG, PNG, WebP — disimpan sebagai WebP)",
+    ),
     db: Session = Depends(get_db),
 ):
-    return controller_register_shop(data, request, response, db)
+    return await controller_register_shop(
+        request=request,
+        response=response,
+        shop_payload={
+            "name": name,
+            "address": address,
+            "number": number,
+            "instagram": instagram,
+            "online_shop": online_shop,
+            "gmaps": gmaps,
+            "description": description,
+        },
+        profile_image=profile_image,
+        db=db,
+    )
 
 
 # --- Seller (Wajib Login, taruh sebelum /{shop_id}) ---
@@ -79,12 +73,43 @@ def get_my_shop_route(
 
 
 @router.patch("/me")
-def update_my_shop_route(
-    data: ShopUpdateRequest,
+async def update_my_shop_route(
+    name: Optional[str] = Form(None, description="Nama sanggar / toko UMKM"),
+    address: Optional[str] = Form(None, description="Alamat lengkap sanggar"),
+    number: Optional[str] = Form(None, description="Nomor WhatsApp pemesanan"),
+    instagram: Optional[str] = Form(None, description="Username atau link Instagram"),
+    online_shop: Optional[str] = Form(None, description="Link Shopee/Tokopedia"),
+    gmaps: Optional[str] = Form(None, description="Link Google Maps"),
+    description: Optional[str] = Form(None, description="Deskripsi singkat sanggar"),
+    active_status: Optional[bool] = Form(None, description="Status aktif/nonaktif sanggar"),
+    remove_profile: bool = Form(False, description="Set true untuk menghapus logo sanggar saat ini"),
+    profile_image: Optional[UploadFile] = File(
+        None,
+        description="Opsional: 1 file logo UMKM pengganti (JPG, PNG, WebP — disimpan sebagai WebP)",
+    ),
     account_id: str = Depends(get_current_account_id),
     db: Session = Depends(get_db),
 ):
-    return controller_update_my_shop(data, account_id, db)
+    raw_fields = {
+        "name": name,
+        "address": address,
+        "number": number,
+        "instagram": instagram,
+        "online_shop": online_shop,
+        "gmaps": gmaps,
+        "description": description,
+        "active_status": active_status,
+    }
+    # Hanya kirim field yang benar-benar disertakan oleh frontend (partial update)
+    update_payload = {k: v for k, v in raw_fields.items() if v is not None}
+
+    return await controller_update_my_shop(
+        update_payload=update_payload,
+        profile_image=profile_image,
+        remove_profile=remove_profile,
+        account_id=account_id,
+        db=db,
+    )
 
 
 @router.patch("/me/status")
@@ -127,10 +152,11 @@ def get_shop_detail_route(
 # 2. CONTROLLER
 # =========================================================================
 
-def controller_register_shop(
-    data: ShopRegistrationRequest,
+async def controller_register_shop(
     request: Request,
     response: Response,
+    shop_payload: dict,
+    profile_image: Optional[UploadFile],
     db: Session,
 ):
     pending_oauth = request.session.get("pending_oauth")
@@ -140,13 +166,24 @@ def controller_register_shop(
             detail="Sesi pendaftaran habis. Silakan login ulang via Google.",
         )
 
-    result = register_shop(db, pending_oauth, data.model_dump())
+    profile_tuple = None
+    if profile_image is not None and profile_image.filename:
+        raw_bytes = await profile_image.read()
+        profile_tuple = (profile_image.filename, profile_image.content_type, raw_bytes)
 
-    del request.session["pending_oauth"]
+    result = await run_in_threadpool(
+        register_shop,
+        db,
+        pending_oauth,
+        shop_payload,
+        profile_tuple,
+    )
 
-    expire = datetime.utcnow() + timedelta(days=1)
+    request.session.pop("pending_oauth", None)
+
+    expire = datetime.now(timezone.utc) + timedelta(days=1)
     token = jwt.encode(
-        {"sub": result["account_id"], "role": "penjual", "exp": expire},
+        {"sub": str(result["account_id"]), "role": "penjual", "exp": expire},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
@@ -168,10 +205,26 @@ def controller_get_my_shop(account_id: str, db: Session):
     return {"status": "success", "data": result}
 
 
-def controller_update_my_shop(data: ShopUpdateRequest, account_id: str, db: Session):
-    # exclude_unset=True memastikan hanya field yang dikirim frontend yang ikut di-update
-    payload = data.model_dump(exclude_unset=True)
-    result = update_my_shop(db, account_id, payload)
+async def controller_update_my_shop(
+    update_payload: dict,
+    profile_image: Optional[UploadFile],
+    remove_profile: bool,
+    account_id: str,
+    db: Session,
+):
+    profile_tuple = None
+    if profile_image is not None and profile_image.filename:
+        raw_bytes = await profile_image.read()
+        profile_tuple = (profile_image.filename, profile_image.content_type, raw_bytes)
+
+    result = await run_in_threadpool(
+        update_my_shop,
+        db,
+        account_id,
+        update_payload,
+        profile_tuple,
+        remove_profile,
+    )
     return {"status": "success", "message": "Profil toko berhasil diperbarui", "data": result}
 
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus,
   Pencil,
@@ -14,6 +14,10 @@ import {
   EyeOff,
   Phone,
   MapPin,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Store,
 } from 'lucide-react';
 import FadeIn from '../components/FadeIn';
 import ProductArtwork from '../user/components/ProductArtwork';
@@ -23,19 +27,59 @@ import {
   formatAttributeValue,
 } from '../user/utils/helpers';
 import {
-  getSavedSellerAccountId,
-  saveSellerSession,
-  createSellerProduct,
-  updateSellerProduct,
-  deleteSellerProduct,
-  updateSellerShop,
+  fetchMyShop,
+  updateMyShop,
+  fetchMyProducts,
+  fetchProductCategories,
+  createSellerProductApi,
+  updateSellerProductApi,
+  updateProductStatus,
+  deleteSellerProductApi,
+  logoutSeller,
 } from './utils/sellerService';
 import SellerLoginView from './components/SellerLoginView';
 import SellerProductFormModal from './components/SellerProductFormModal';
 import SellerShopSettingsModal from './components/SellerShopSettingsModal';
 
-export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
-  const [currentAccountId, setCurrentAccountId] = useState(() => getSavedSellerAccountId());
+function ShopAvatar({ src, name, sizeClass = 'w-10 h-10', iconClass = 'w-5 h-5' }) {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
+  if (src && !imgError) {
+    return (
+      <img
+        src={src}
+        alt={`Logo ${name || 'Sanggar'}`}
+        onError={() => setImgError(true)}
+        className={`${sizeClass} rounded-md object-cover border border-[#C4A46B]/40 bg-[#EFEAE0] shrink-0`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClass} rounded-md border border-[#C4A46B]/35 bg-[#C4A46B]/12 flex items-center justify-center shrink-0`}
+      aria-hidden="true"
+    >
+      <Store className={`${iconClass} text-[#C4A46B]`} />
+    </div>
+  );
+}
+
+export default function SellerPortalPage({ onOpenUserCatalog }) {
+  const [authStatus, setAuthStatus] = useState('checking'); // 'checking' | 'authenticated' | 'unauthenticated' | 'error'
+  const [loadError, setLoadError] = useState('');
+  const [shop, setShop] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [rawProducts, setRawProducts] = useState([]);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [busyProductId, setBusyProductId] = useState(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -47,80 +91,146 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
     setToastMsg(msg);
     setTimeout(() => {
       setToastMsg((prev) => (prev === msg ? '' : prev));
-    }, 3000);
+    }, 3200);
   }, []);
 
-  // Resolusi akun & toko milik seller yang sedang login
-  const currentSession = useMemo(() => {
-    if (!currentAccountId) return null;
-    const account = (db.account || []).find(
-      (a) => a.id === currentAccountId && a.role === 'penjual'
-    );
-    if (!account) return null;
-    const shop = (db.shop || []).find((s) => s.account_id === account.id);
-    if (!shop) return null;
-    return { account, shop };
-  }, [db, currentAccountId]);
-
-  const handleLoginSuccess = (account, shop, updatedDb) => {
-    if (updatedDb && updatedDb !== db) {
-      setDb(updatedDb);
-    }
-    saveSellerSession(account.id);
-    setCurrentAccountId(account.id);
-    showToast(`Selamat datang, ${account.display_name} (${shop.name})`);
-  };
-
-  const handleLogout = () => {
-    saveSellerSession(null);
-    setCurrentAccountId(null);
+  const handleUnauthorized = useCallback(() => {
+    setShop(null);
+    setRawProducts([]);
     setEditingProduct(null);
     setIsProductModalOpen(false);
-  };
+    setIsShopModalOpen(false);
+    setAuthStatus('unauthenticated');
+  }, []);
 
-  // ISOLASI DATA: Hanya ambil produk milik shop.id dari seller yang login
+  // Muat sesi toko (cookie access_token), kategori, dan produk sanggar dari backend
+  const loadDashboardData = useCallback(
+    async ({ silent = false } = {}) => {
+      if (silent) {
+        setIsRefreshing(true);
+      } else {
+        setAuthStatus('checking');
+        setLoadError('');
+      }
+
+      try {
+        const myShop = await fetchMyShop();
+        if (!myShop) {
+          handleUnauthorized();
+          return;
+        }
+
+        const [cats, prodRes] = await Promise.all([
+          fetchProductCategories(),
+          fetchMyProducts({ page: 1, limit: 100 }),
+        ]);
+
+        setShop(myShop);
+        setCategories(cats);
+        setRawProducts(prodRes.items);
+        setAuthStatus('authenticated');
+        setLoadError('');
+      } catch (err) {
+        if (err?.status === 401) {
+          handleUnauthorized();
+        } else {
+          setLoadError(
+            err?.message ||
+              'Tidak dapat terhubung ke server backend. Pastikan server backend (port 3002) sedang aktif.'
+          );
+          if (!silent) {
+            setAuthStatus('error');
+          } else {
+            showToast(err?.message || 'Gagal menyegarkan data sanggar.');
+          }
+        }
+      } finally {
+        if (silent) setIsRefreshing(false);
+      }
+    },
+    [handleUnauthorized, showToast]
+  );
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  // Ratakan category_attribute untuk form modal produk
+  const flattenedCategoryAttributes = useMemo(() => {
+    return categories.flatMap((cat) =>
+      (cat.attributes || []).map((attr) => ({
+        ...attr,
+        category_id: cat.id,
+      }))
+    );
+  }, [categories]);
+
+  // Normalisasi produk dari respons GET /product/me untuk ditampilkan pada kartu katalog
   const myProducts = useMemo(() => {
-    if (!currentSession) return [];
-    const { shop } = currentSession;
-    const categoryById = new Map((db.category || []).map((c) => [c.id, c]));
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
 
-    const attrsByCatId = new Map();
-    (db.category_attribute || []).forEach((attr) => {
-      if (!attrsByCatId.has(attr.category_id)) attrsByCatId.set(attr.category_id, []);
-      attrsByCatId.get(attr.category_id).push(attr);
-    });
+    return rawProducts.map((p) => {
+      const catObj = categoryById.get(p.category_id) || {
+        id: p.category_id,
+        name: p.category_name || 'Batik',
+        slug: p.category_slug || 'batik',
+        attributes: [],
+      };
 
-    const imgsByProdId = new Map();
-    (db.product_display_image || []).forEach((img) => {
-      if (!imgsByProdId.has(img.product_id)) imgsByProdId.set(img.product_id, []);
-      imgsByProdId.get(img.product_id).push(img);
-    });
-    imgsByProdId.forEach((list) => list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+      const schemas = [...(catObj.attributes || [])].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0)
+      );
+      const rawAttrs = p.additional_attribute || {};
 
-    return (db.product || [])
-      .filter((p) => p.shop_id === shop.id)
-      .map((p) => {
-        const catObj = categoryById.get(p.category_id) || { id: p.category_id, name: 'Umum' };
-        const schemas = attrsByCatId.get(p.category_id) || [];
-        const rawAttrs = p.additional_attribute || {};
-        const formattedAttributes = schemas
-          .filter((s) => rawAttrs[s.name] !== undefined)
-          .map((s) => ({
-            name: s.name,
-            label: formatAttributeLabel(s.name),
-            displayValue: formatAttributeValue(s, rawAttrs[s.name]),
-          }));
-        const displayImages = imgsByProdId.get(p.id) || [];
+      const formattedAttributes = schemas
+        .filter(
+          (s) =>
+            rawAttrs[s.name] !== undefined &&
+            rawAttrs[s.name] !== null &&
+            rawAttrs[s.name] !== ''
+        )
+        .map((s) => ({
+          name: s.name,
+          label: formatAttributeLabel(s.name),
+          displayValue: formatAttributeValue(s, rawAttrs[s.name]),
+        }));
 
-        return {
-          ...p,
-          category: catObj,
-          formattedAttributes,
-          displayImages,
-          primaryImageUrl: displayImages[0]?.image_url || '',
-        };
+      const schemaNames = new Set(schemas.map((s) => s.name));
+      Object.entries(rawAttrs).forEach(([key, val]) => {
+        if (!schemaNames.has(key) && val !== undefined && val !== null && val !== '') {
+          formattedAttributes.push({
+            name: key,
+            label: formatAttributeLabel(key),
+            displayValue: formatAttributeValue(
+              {
+                name: key,
+                type:
+                  typeof val === 'boolean'
+                    ? 'boolean'
+                    : typeof val === 'number'
+                    ? 'number'
+                    : 'string',
+              },
+              val
+            ),
+          });
+        }
       });
-  }, [db, currentSession]);
+
+      const displayImages = [...(p.display_images || [])].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0)
+      );
+
+      return {
+        ...p,
+        description: p.description || '',
+        category: catObj,
+        formattedAttributes,
+        displayImages,
+        primaryImageUrl: displayImages[0]?.public_url || '',
+      };
+    });
+  }, [rawProducts, categories]);
 
   const filteredMyProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -128,25 +238,91 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
       const matchCat = categoryFilter === 'ALL' || p.category_id === categoryFilter;
       const matchQ =
         !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.category.name.toLowerCase().includes(q);
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q) ||
+        (p.category?.name || '').toLowerCase().includes(q);
       return matchCat && matchQ;
     });
   }, [myProducts, categoryFilter, searchQuery]);
 
-  // Jika belum login, tampilkan halaman Login / Registrasi Seller
-  if (!currentSession) {
-    return (
-      <SellerLoginView
-        db={db}
-        onLoginSuccess={handleLoginSuccess}
-        onBackToCatalog={onOpenUserCatalog}
-      />
-    );
-  }
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logoutSeller();
+    } catch {
+      // Tetap kosongkan state lokal meski request logout gagal
+    } finally {
+      setIsLoggingOut(false);
+      handleUnauthorized();
+    }
+  };
 
-  const { account, shop } = currentSession;
+  const handleToggleProductVisibility = async (product) => {
+    const nextStatus = !(product.active_status !== false);
+    setBusyProductId(product.id);
+    try {
+      const updated = await updateProductStatus(product.id, nextStatus);
+      setRawProducts((prev) =>
+        prev.map((item) =>
+          item.id === product.id
+            ? { ...(updated || item), active_status: nextStatus }
+            : item
+        )
+      );
+      showToast(
+        nextStatus
+          ? `"${product.name}" ditampilkan kembali di etalase.`
+          : `"${product.name}" disembunyikan sementara (Draft).`
+      );
+    } catch (err) {
+      if (err?.status === 401) {
+        handleUnauthorized();
+      } else {
+        showToast(err?.message || 'Gagal mengubah status tayang produk.');
+      }
+    } finally {
+      setBusyProductId(null);
+    }
+  };
+
+  const handleDeleteProduct = async (product) => {
+    const confirmed = window.confirm(
+      `Hapus permanen produk "${product.name}" beserta seluruh gambarnya dari katalog ${shop?.name || 'sanggar Anda'}?`
+    );
+    if (!confirmed) return;
+
+    setBusyProductId(product.id);
+    try {
+      await deleteSellerProductApi(product.id, true);
+      setRawProducts((prev) => prev.filter((item) => item.id !== product.id));
+      showToast(`Produk "${product.name}" telah dihapus permanen.`);
+    } catch (err) {
+      if (err?.status === 401) {
+        handleUnauthorized();
+      } else {
+        showToast(err?.message || 'Gagal menghapus produk.');
+      }
+    } finally {
+      setBusyProductId(null);
+    }
+  };
+
+  const handleSaveShopSettings = async (shopInput, options) => {
+    try {
+      const updatedShop = await updateMyShop(shopInput, options);
+      if (updatedShop) {
+        setShop(updatedShop);
+      }
+      setIsShopModalOpen(false);
+      showToast('Profil & logo sanggar berhasil diperbarui.');
+    } catch (err) {
+      if (err?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      throw err;
+    }
+  };
 
   const handleOpenAddModal = () => {
     setEditingProduct(null);
@@ -154,90 +330,100 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
   };
 
   const handleOpenEditModal = (product) => {
-    if (product.shop_id !== shop.id) {
-      showToast('Akses ditolak: Produk ini bukan milik sanggar Anda.');
-      return;
-    }
     setEditingProduct(product);
     setIsProductModalOpen(true);
   };
 
-  const handleSaveProduct = (productInput, imageUrls) => {
+  const handleSaveProduct = async (productInput, mediaOptions) => {
     try {
       if (editingProduct) {
-        const nextDb = updateSellerProduct(
-          db,
-          account.id,
-          editingProduct.id,
-          productInput,
-          imageUrls
-        );
-        setDb(nextDb);
+        const updated = await updateSellerProductApi(editingProduct.id, productInput, {
+          newDisplayFiles: mediaOptions?.displayFiles || [],
+          deleteDisplayImageIds: mediaOptions?.deleteDisplayImageIds || [],
+          displayImageOrders: mediaOptions?.displayImageOrders || [],
+          newMockupFile: mediaOptions?.mockupFile || null,
+          removeMockup: Boolean(mediaOptions?.removeMockup),
+        });
+        if (updated) {
+          setRawProducts((prev) =>
+            prev.map((item) => (item.id === editingProduct.id ? updated : item))
+          );
+        }
         showToast(`Produk "${productInput.name}" berhasil diperbarui.`);
       } else {
-        const nextDb = createSellerProduct(db, account.id, productInput, imageUrls);
-        setDb(nextDb);
+        const created = await createSellerProductApi(productInput, {
+          displayFiles: mediaOptions?.displayFiles || [],
+          mockupFile: mediaOptions?.mockupFile || null,
+        });
+        if (created) {
+          setRawProducts((prev) => [created, ...prev]);
+        }
         showToast(`Produk "${productInput.name}" ditambahkan ke ${shop.name}.`);
       }
+
       setIsProductModalOpen(false);
       setEditingProduct(null);
     } catch (err) {
-      showToast(err.message);
+      if (err?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      throw err;
     }
   };
 
-  const handleDeleteProduct = (product) => {
-    if (product.shop_id !== shop.id) {
-      showToast('Akses ditolak: Anda tidak bisa menghapus barang UMKM lain.');
-      return;
-    }
-    const confirmed = window.confirm(
-      `Hapus produk "${product.name}" dari buku katalog ${shop.name}?`
+  // 1. Sedang memeriksa cookie access_token via GET /shop/me
+  if (authStatus === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] flex flex-col items-center justify-center gap-3 px-4">
+        <Loader2 className="w-7 h-7 animate-spin text-[#7C3219]" />
+        <p className="font-serif text-lg text-[#1C1917]">
+          Memeriksa sesi Portal Perajin...
+        </p>
+      </div>
     );
-    if (!confirmed) return;
+  }
 
-    try {
-      const nextDb = deleteSellerProduct(db, account.id, product.id);
-      setDb(nextDb);
-      showToast(`Produk "${product.name}" telah dihapus.`);
-    } catch (err) {
-      showToast(err.message);
-    }
-  };
+  // 2. Gagal koneksi ke backend (bukan 401)
+  if (authStatus === 'error') {
+    return (
+      <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 p-8 text-center space-y-5">
+          <div className="w-12 h-12 rounded-full bg-[#9E2A2B]/10 text-[#9E2A2B] flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-serif font-normal text-2xl text-[#1C1917]">
+              Gagal Memuat Dasbor Sanggar
+            </h1>
+            <p className="text-[14px] text-[#575049] leading-relaxed">{loadError}</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => loadDashboardData()}
+              className="taste-btn-primary"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Coba Lagi</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenUserCatalog(null)}
+              className="taste-btn-secondary"
+            >
+              <span>Kembali ke Etalase</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const handleToggleProductVisibility = (product) => {
-    try {
-      const nextDb = updateSellerProduct(
-        db,
-        account.id,
-        product.id,
-        {
-          ...product,
-          active_status: !product.active_status,
-        },
-        product.displayImages.map((i) => i.image_url)
-      );
-      setDb(nextDb);
-      showToast(
-        !product.active_status
-          ? `"${product.name}" ditampilkan kembali di etalase.`
-          : `"${product.name}" disembunyikan sementara (Draft).`
-      );
-    } catch (err) {
-      showToast(err.message);
-    }
-  };
-
-  const handleSaveShopSettings = (shopInput) => {
-    try {
-      const nextDb = updateSellerShop(db, account.id, shopInput);
-      setDb(nextDb);
-      setIsShopModalOpen(false);
-      showToast('Profil sanggar & nomor WhatsApp berhasil diperbarui.');
-    } catch (err) {
-      showToast(err.message);
-    }
-  };
+  // 3. Belum login (401 dari GET /shop/me)
+  if (authStatus === 'unauthenticated' || !shop) {
+    return <SellerLoginView onBackToCatalog={() => onOpenUserCatalog(null)} />;
+  }
 
   const activeCount = myProducts.filter((p) => p.active_status !== false).length;
 
@@ -258,26 +444,19 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
       <header className="sticky top-0 z-40 bg-[#1B1714] text-[#F5F1E8] border-b border-white/12">
         <div className="taste-wrap h-[72px] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 32 32"
-              fill="none"
-              aria-hidden="true"
-              className="shrink-0"
-            >
-              <path d="M16 4L28 16L16 28L4 16L16 4Z" stroke="#C4A46B" strokeWidth="2" />
-              <circle cx="16" cy="16" r="3.5" fill="#C4A46B" />
-            </svg>
+            <ShopAvatar
+              src={shop.profile_public_url}
+              name={shop.name}
+              sizeClass="w-10 h-10"
+              iconClass="w-5 h-5"
+            />
             <div className="min-w-0">
               <span className="font-aksara text-[17px] sm:text-[19px] text-[#C4A46B] block leading-none truncate">
                 Batik Wicara Trenggalek
               </span>
               <span className="text-[13px] text-[#F5F1E8]/90 flex items-center gap-1.5 mt-1 truncate">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#C4A46B] shrink-0" />
-                <span className="truncate">
-                  {shop.name} · Pengelola: {account.display_name}
-                </span>
+                <span className="truncate">{shop.name}</span>
               </span>
             </div>
           </div>
@@ -296,9 +475,14 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md bg-[#9E2A2B] hover:bg-[#7F2021] text-white text-[13px] font-medium transition-colors cursor-pointer"
+              disabled={isLoggingOut}
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md bg-[#9E2A2B] hover:bg-[#7F2021] disabled:opacity-70 text-white text-[13px] font-medium transition-colors cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
+              {isLoggingOut ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <LogOut className="w-4 h-4" />
+              )}
               <span>Keluar</span>
             </button>
           </div>
@@ -310,33 +494,64 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
         <FadeIn>
           {/* Kartu Identitas Sanggar & Status Isolasi */}
           <div className="rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-2.5">
-              <div className="flex flex-wrap items-center gap-3 text-[13px]">
-                <span className="inline-flex items-center gap-1.5 font-medium text-[#1F5E3B]">
-                  <ShieldCheck className="w-4 h-4 shrink-0" />
-                  <span>Akses terisolasi: {shop.id}</span>
-                </span>
-                <span className="text-[#575049] tabular-nums">
-                  {activeCount} aktif dari {myProducts.length} produk
-                </span>
-              </div>
+            <div className="flex items-start gap-4 sm:gap-5 min-w-0">
+              <ShopAvatar
+                src={shop.profile_public_url}
+                name={shop.name}
+                sizeClass="w-16 h-16 sm:w-20 sm:h-20"
+                iconClass="w-7 h-7 sm:w-8 sm:h-8"
+              />
 
-              <h1 className="font-serif font-normal text-2xl sm:text-4xl text-[#1C1917] tracking-[-0.02em]">
-                Dasbor Katalog {shop.name}
-              </h1>
+              <div className="space-y-2.5 min-w-0">
+                <div className="flex flex-wrap items-center gap-3 text-[13px]">
+                  <span
+                    className={`inline-flex items-center gap-1.5 font-medium ${
+                      shop.active_status !== false ? 'text-[#1F5E3B]' : 'text-[#9E2A2B]'
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>
+                      {shop.active_status !== false ? 'Sanggar Aktif' : 'Sanggar Nonaktif'}
+                    </span>
+                  </span>
+                  <span className="text-[#575049] tabular-nums">
+                    {activeCount} aktif dari {myProducts.length} produk
+                  </span>
+                </div>
 
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[14px] text-[#575049]">
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-[#7C3219] shrink-0" />
-                  <span>{shop.address}</span>
-                </span>
-                <span className="flex items-center gap-1.5 font-mono text-[13px] text-[#1C1917] tabular-nums">
-                  <Phone className="w-3.5 h-3.5 text-[#7C3219] shrink-0" />+{shop.number}
-                </span>
+                <h1 className="font-serif font-normal text-2xl sm:text-4xl text-[#1C1917] tracking-[-0.02em] break-words">
+                  Dasbor Katalog {shop.name}
+                </h1>
+
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[14px] text-[#575049]">
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-[#7C3219] shrink-0" />
+                    <span>{shop.address || 'Alamat sanggar belum diatur'}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 font-mono text-[13px] text-[#1C1917] tabular-nums">
+                    <Phone className="w-3.5 h-3.5 text-[#7C3219] shrink-0" />
+                    <span>
+                      {shop.number ? `+${shop.number}` : 'Nomor WhatsApp belum diatur'}
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => loadDashboardData({ silent: true })}
+                disabled={isRefreshing}
+                className="taste-btn-secondary"
+                title="Muat ulang data dari server"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 text-[#7C3219] ${isRefreshing ? 'animate-spin' : ''}`}
+                />
+                <span>Segarkan</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsShopModalOpen(true)}
@@ -372,7 +587,7 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
             >
               Semua Kategori ({myProducts.length})
             </button>
-            {(db.category || []).map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
@@ -425,9 +640,13 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
             </button>
           </div>
         ) : (
-          <div key={categoryFilter} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 fade-swap">
+          <div
+            key={categoryFilter}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 fade-swap"
+          >
             {filteredMyProducts.map((prod, idx) => {
               const isVisible = prod.active_status !== false;
+              const isBusy = busyProductId === prod.id;
               return (
                 <article
                   key={prod.id}
@@ -468,19 +687,21 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
                       </div>
 
                       <p className="text-[14px] text-[#575049] line-clamp-2 leading-relaxed">
-                        {prod.description}
+                        {prod.description || 'Belum ada deskripsi produk.'}
                       </p>
 
-                      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-[#1C1917]/10 text-[13px]">
-                        {prod.formattedAttributes.slice(0, 4).map((attr) => (
-                          <div key={attr.name} className="min-w-0">
-                            <dt className="text-[#575049] truncate">{attr.label}</dt>
-                            <dd className="font-medium text-[#1C1917] truncate">
-                              {attr.displayValue}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
+                      {prod.formattedAttributes.length > 0 && (
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-[#1C1917]/10 text-[13px]">
+                          {prod.formattedAttributes.slice(0, 4).map((attr) => (
+                            <div key={attr.name} className="min-w-0">
+                              <dt className="text-[#575049] truncate">{attr.label}</dt>
+                              <dd className="font-medium text-[#1C1917] truncate">
+                                {attr.displayValue}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
                     </div>
                   </div>
 
@@ -488,11 +709,14 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
                   <div className="px-5 pb-5 pt-1 grid grid-cols-3 gap-2">
                     <button
                       type="button"
+                      disabled={isBusy}
                       onClick={() => handleToggleProductVisibility(prod)}
-                      className="min-h-[40px] px-2.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#575049] hover:text-[#1C1917] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      className="min-h-[40px] px-2.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] disabled:opacity-60 border border-[#1C1917]/15 text-[13px] font-medium text-[#575049] hover:text-[#1C1917] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                       title={isVisible ? 'Sembunyikan dari katalog' : 'Tampilkan di katalog'}
                     >
-                      {isVisible ? (
+                      {isBusy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isVisible ? (
                         <EyeOff className="w-3.5 h-3.5" />
                       ) : (
                         <Eye className="w-3.5 h-3.5" />
@@ -502,8 +726,9 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
 
                     <button
                       type="button"
+                      disabled={isBusy}
                       onClick={() => handleOpenEditModal(prod)}
-                      className="min-h-[40px] px-2.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/20 text-[13px] font-medium text-[#7C3219] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      className="min-h-[40px] px-2.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] disabled:opacity-60 border border-[#1C1917]/20 text-[13px] font-medium text-[#7C3219] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                       <span>Edit</span>
@@ -511,8 +736,9 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
 
                     <button
                       type="button"
+                      disabled={isBusy}
                       onClick={() => handleDeleteProduct(prod)}
-                      className="min-h-[40px] px-2.5 rounded-md bg-[#FCFBF8] hover:bg-[#9E2A2B]/10 border border-[#9E2A2B]/30 text-[13px] font-medium text-[#9E2A2B] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      className="min-h-[40px] px-2.5 rounded-md bg-[#FCFBF8] hover:bg-[#9E2A2B]/10 disabled:opacity-60 border border-[#9E2A2B]/30 text-[13px] font-medium text-[#9E2A2B] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Hapus</span>
@@ -525,7 +751,7 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
         )}
       </main>
 
-      {/* Modal Tambah / Edit Produk */}
+      {/* Modal Tambah / Edit Produk (POST /product & PATCH /product/{id}) */}
       {isProductModalOpen && (
         <SellerProductFormModal
           key={editingProduct ? editingProduct.id : 'new-product'}
@@ -535,14 +761,14 @@ export default function SellerPortalPage({ db, setDb, onOpenUserCatalog }) {
             setEditingProduct(null);
           }}
           initialProduct={editingProduct}
-          categories={db.category || []}
-          categoryAttributes={db.category_attribute || []}
+          categories={categories}
+          categoryAttributes={flattenedCategoryAttributes}
           shopId={shop.id}
           onSaveProduct={handleSaveProduct}
         />
       )}
 
-      {/* Modal Edit Profil Sanggar */}
+      {/* Modal Edit Profil & Logo Sanggar (PATCH /shop/me) */}
       {isShopModalOpen && (
         <SellerShopSettingsModal
           key={shop.id}

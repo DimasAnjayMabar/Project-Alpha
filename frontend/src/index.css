@@ -23,8 +23,16 @@
   --muted: #575049;
   --line: rgba(28, 25, 23, 0.12);
   --line-strong: rgba(28, 25, 23, 0.24);
+
+  /* Palet Utama Wastra Trenggalek */
   --action: #7C3219;
   --action-hover: #632612;
+  --action-soft: #F3E9E2;
+  --gold: #B6842C;
+  --gold-soft: #F6EEDB;
+  --indigo: #21415C;
+  --indigo-soft: #E9EFF4;
+
   --dark-ground: #1B1714;
   --dark-ink: #F5F1E8;
   --dark-muted: #B5ACA2;
@@ -40,7 +48,7 @@ html {
   background-color: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  scroll-padding-top: 72px;
+  scroll-padding-top: 76px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -52,14 +60,12 @@ body {
   overflow-x: clip;
 }
 
-/* Instant, crisp focus ring in sogan accent */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--action);
   outline-offset: 2px;
   transition: none;
 }
 
-/* Skip link for keyboard accessibility */
 .skip-link {
   position: absolute;
   left: -9999px;
@@ -78,7 +84,6 @@ body {
   top: 14px;
 }
 
-/* Shared container wrapper */
 .taste-wrap {
   max-width: 1280px;
   margin-inline: auto;
@@ -106,7 +111,7 @@ body {
   justify-content: center;
   gap: 8px;
   min-height: 44px;
-  padding: 10px 20px;
+  padding: 10px 18px;
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
@@ -173,6 +178,31 @@ body {
   cursor: not-allowed;
 }
 
+/* Badge Wastra (Tipe Batik & Material) */
+.taste-badge-indigo {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--indigo-soft);
+  color: var(--indigo);
+  border: 1px solid rgba(33, 65, 92, 0.16);
+}
+
+.taste-badge-gold {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--gold-soft);
+  color: #7A5414;
+  border: 1px solid rgba(182, 132, 44, 0.24);
+}
+
 /* Drawn left-to-right underline for links & nav */
 .taste-nav-link,
 .taste-link {
@@ -224,7 +254,6 @@ body {
   }
 }
 
-/* Card hover lift & artwork zoom inside clip frame */
 .taste-card {
   transition:
     transform 180ms var(--ease-ui),
@@ -244,7 +273,7 @@ body {
 @media (hover: hover) and (pointer: fine) {
   .taste-card:hover {
     transform: translateY(-2px);
-    border-color: rgba(28, 25, 23, 0.22);
+    border-color: rgba(124, 50, 25, 0.28);
     box-shadow: 0 12px 28px -18px rgba(28, 25, 23, 0.22);
   }
 
@@ -263,7 +292,6 @@ body {
   line-height: 1.1;
 }
 
-/* Lightweight GPU-only Fade & Entrance Animations */
 @keyframes heroRise {
   from {
     opacity: 0;
@@ -300,7 +328,7 @@ body {
 @keyframes fadePanel {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.985);
+    transform: translateY(10px) scale(0.99);
   }
   to {
     opacity: 1;
@@ -359,7 +387,7 @@ body {
 }
 
 .fade-panel {
-  animation: fadePanel 280ms var(--ease-enter) both;
+  animation: fadePanel 240ms var(--ease-enter) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

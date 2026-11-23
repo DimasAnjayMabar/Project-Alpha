@@ -409,7 +409,7 @@ def controller_get_public_product(product_id: UUID, db: Session):
 harness_router = APIRouter(tags=["Harness Internal"])
 
 
-@harness_router.get("/api/products/search")
+@harness_router.get("/chatbot/products/search")
 def harness_search_products_route(
     keyword: Optional[str] = Query(None, description="Kata kunci nama toko/produk"),
     motif: Optional[str] = Query(None, description="Filter motif batik"),

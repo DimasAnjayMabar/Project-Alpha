@@ -33,7 +33,7 @@ STREAM_CHUNK_SIZE = 64 * 1024  # 64 KB per chunk
 
 logger = logging.getLogger("backend.storage_service")
 
-# Format masukan file dari controller/product_service: (filename, content_type, raw_bytes)
+# Format masukan file dari controller/service lain: (filename, content_type, raw_bytes)
 IncomingFile = Tuple[str, Optional[str], bytes]
 
 
@@ -50,12 +50,19 @@ def _internal_headers() -> dict:
 
 def build_public_media_url(relative_path: Optional[str]) -> Optional[str]:
     """
-    Ubah path relatif DB (uploads/products/display/abc.webp)
-    menjadi URL publik lewat backend 3002.
+    Ubah path relatif DB (uploads/products/... atau uploads/shop_profile/...)
+    menjadi URL publik lewat proxy backend 3002.
+    Jika sudah berupa URL penuh http(s):// (misalnya dari seed lama), kembalikan apa adanya.
     """
     if not relative_path:
         return None
-    cleaned = relative_path.strip().lstrip("/").replace("\\", "/")
+    raw = relative_path.strip()
+    if not raw:
+        return None
+    if raw.startswith(("http://", "https://")):
+        return raw
+
+    cleaned = raw.lstrip("/").replace("\\", "/")
     if not cleaned:
         return None
     return f"{BACKEND_BASE_URL}{MEDIA_PUBLIC_PREFIX}/{quote(cleaned, safe='/')}"
@@ -115,7 +122,7 @@ def check_storage_health() -> dict:
 
 
 # =========================================================================
-# UPLOAD DISPLAY (MULTIPLE - GALERI PRODUK)
+# UPLOAD DISPLAY (MULTIPLE - GALERI PRODUK, OUTPUT WEBP)
 # =========================================================================
 
 def upload_display_images(
@@ -168,7 +175,7 @@ def upload_display_images(
 
 
 # =========================================================================
-# UPLOAD MOCKUP (SINGLE - TEKSTUR MOCKUP 3D LOSSLESS)
+# UPLOAD MOCKUP (SINGLE - TEKSTUR MOCKUP 3D WEBP LOSSLESS)
 # =========================================================================
 
 def upload_mockup_image(
@@ -176,15 +183,11 @@ def upload_mockup_image(
     content_type: Optional[str],
     raw_bytes: bytes,
     prefix: Optional[str] = None,
-    output_format: str = "webp",
+    output_format: Optional[str] = None,  # Diabaikan: storage diseragamkan ke WebP lossless
 ) -> dict:
-    """Kirim 1 gambar mockup 3D lossless (WebP/PNG) ke storage server (port 3003)."""
+    """Kirim 1 gambar mockup 3D WebP lossless ke storage server (port 3003)."""
     if not raw_bytes:
         raise ValidationError(f"File mockup '{filename or 'mockup'}' kosong.")
-
-    fmt = (output_format or "webp").lower()
-    if fmt not in ("webp", "png"):
-        raise ValidationError("output_format hanya mendukung 'webp' atau 'png'.")
 
     url = f"{STORAGE_BASE_URL}/storage/upload/mockup"
     files_payload = {
@@ -194,7 +197,7 @@ def upload_mockup_image(
             content_type or "application/octet-stream",
         )
     }
-    form_data = {"output_format": fmt}
+    form_data = {}
     if prefix:
         form_data["prefix"] = prefix
 
@@ -218,7 +221,52 @@ def upload_mockup_image(
 
 
 # =========================================================================
-# DELETE FILES (EDIT PRODUK, HAPUS PERMANEN & ROLLBACK DB)
+# UPLOAD SHOP PROFILE / LOGO UMKM (SINGLE - OUTPUT WEBP)
+# =========================================================================
+
+def upload_shop_profile_image(
+    filename: str,
+    content_type: Optional[str],
+    raw_bytes: bytes,
+    prefix: Optional[str] = None,
+) -> dict:
+    """Kirim 1 gambar logo/profil toko UMKM ke storage server (port 3003)."""
+    if not raw_bytes:
+        raise ValidationError(f"File logo toko '{filename or 'shop-profile'}' kosong.")
+
+    url = f"{STORAGE_BASE_URL}/storage/upload/shop-profile"
+    files_payload = {
+        "file": (
+            filename or "shop-profile.bin",
+            raw_bytes,
+            content_type or "application/octet-stream",
+        )
+    }
+    form_data = {}
+    if prefix:
+        form_data["prefix"] = prefix
+
+    try:
+        resp = requests.post(
+            url,
+            headers=_internal_headers(),
+            files=files_payload,
+            data=form_data,
+            timeout=STORAGE_UPLOAD_TIMEOUT,
+        )
+        data = _handle_storage_response(resp)
+        return _attach_public_url(data)
+
+    except ServiceException:
+        raise
+    except requests.exceptions.Timeout:
+        raise ServiceException("Upload logo toko ke storage timeout.", status_code=504)
+    except requests.exceptions.RequestException as e:
+        raise ServiceException(f"Gagal mengunggah logo toko ke storage: {str(e)}", status_code=503)
+
+
+# =========================================================================
+# DELETE FILES (EDIT, HAPUS PERMANEN & ROLLBACK DB)
 # =========================================================================
 
 def delete_storage_files(

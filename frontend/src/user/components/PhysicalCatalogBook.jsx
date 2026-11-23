@@ -267,25 +267,25 @@ export default function PhysicalCatalogBookSection({
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       onKeyDown={(e) => interactive && e.key === 'Enter' && triggerFlip(1)}
-      className="group relative h-full min-h-[560px] rounded-r-lg rounded-l-sm bg-[#1F1814] text-[#F5F1E8] p-6 sm:p-10 border border-[#C4A46B]/40 shadow-[14px_18px_38px_rgba(24,18,14,0.34)] cursor-pointer overflow-hidden flex flex-col justify-between"
+      className="group relative h-full min-h-[530px] rounded-r-lg rounded-l-sm bg-[#1F1814] text-[#F5F1E8] p-6 sm:p-9 border border-[#C4A46B]/40 shadow-[14px_18px_38px_rgba(24,18,14,0.34)] cursor-pointer overflow-hidden flex flex-col justify-between"
     >
       <div className="absolute inset-y-0 left-0 w-6 bg-black/35 border-r border-[#C4A46B]/20 pointer-events-none" />
       <div className="absolute inset-y-3 right-0 w-2.5 bg-[repeating-linear-gradient(to_left,#E6DEC8_0px,#FAF8F3_1px,#D4C8B2_2px)] rounded-r-sm opacity-95 pointer-events-none" />
 
-      <div className="relative ml-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-6 sm:p-8 flex flex-col justify-between">
-        <div className="text-center space-y-2.5">
+      <div className="relative ml-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-5 sm:p-7 flex flex-col justify-between">
+        <div className="text-center space-y-2">
           <span className="inline-block text-[13px] font-medium text-[#C4A46B]">
             Katalog Resmi Sanggar · Kabupaten Trenggalek
           </span>
-          <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#F5F1E8] tracking-[-0.02em] leading-snug pt-1">
+          <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#F5F1E8] tracking-[-0.02em] leading-snug pt-0.5">
             {shop.name}
           </h3>
-          <p className="text-[14px] text-[#B5ACA2] max-w-sm mx-auto leading-relaxed">
+          <p className="text-[13px] text-[#B5ACA2] max-w-sm mx-auto leading-relaxed">
             {shop.address}
           </p>
         </div>
 
-        <div className="my-5 mx-auto w-56 sm:w-64 aspect-[4/3] rounded-sm overflow-hidden border border-[#C4A46B]/35 bg-[#1B1714]">
+        <div className="my-4 mx-auto w-52 sm:w-60 aspect-[4/3] rounded-sm overflow-hidden border border-[#C4A46B]/35 bg-[#1B1714]">
           {leadProduct && (
             <ProductArtwork
               product={leadProduct}
@@ -296,7 +296,7 @@ export default function PhysicalCatalogBookSection({
           )}
         </div>
 
-        <div className="text-center space-y-3.5">
+        <div className="text-center space-y-3">
           {account && (
             <p className="text-[13px] text-[#B5ACA2]">
               Pengelola sanggar:{' '}
@@ -329,19 +329,19 @@ export default function PhysicalCatalogBookSection({
   const renderBackCoverFace = (interactive = true) => {
     const lastProduct = products[products.length - 1] || leadProduct;
     return (
-      <div className="group relative h-full min-h-[560px] rounded-l-lg rounded-r-sm bg-[#1F1814] text-[#F5F1E8] p-6 sm:p-10 border border-[#C4A46B]/40 shadow-[-14px_18px_38px_rgba(24,18,14,0.34)] overflow-hidden flex flex-col justify-between cursor-pointer">
+      <div className="group relative h-full min-h-[530px] rounded-l-lg rounded-r-sm bg-[#1F1814] text-[#F5F1E8] p-6 sm:p-9 border border-[#C4A46B]/40 shadow-[-14px_18px_38px_rgba(24,18,14,0.34)] overflow-hidden flex flex-col justify-between cursor-pointer">
         <div className="absolute inset-y-0 right-0 w-6 bg-black/35 border-l border-[#C4A46B]/20 pointer-events-none" />
         <div className="absolute inset-y-3 left-0 w-2.5 bg-[repeating-linear-gradient(to_right,#E6DEC8_0px,#FAF8F3_1px,#D4C8B2_2px)] rounded-l-sm opacity-95 pointer-events-none" />
 
-        <div className="relative mr-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-6 sm:p-8 text-center flex flex-col justify-between">
-          <div className="space-y-2">
+        <div className="relative mr-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-5 sm:p-7 text-center flex flex-col justify-between">
+          <div className="space-y-1.5">
             <span className="inline-block text-[13px] font-medium text-[#C4A46B]">
               Sampul Penutup Katalog
             </span>
-            <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#F5F1E8] pt-1">
+            <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#F5F1E8] pt-0.5">
               {shop.name}
             </h3>
-            <p className="text-[14px] text-[#B5ACA2]">{shop.address}</p>
+            <p className="text-[13px] text-[#B5ACA2]">{shop.address}</p>
           </div>
 
           <div className="my-4 space-y-4">
@@ -887,9 +887,9 @@ export default function PhysicalCatalogBookSection({
                   href={currentProd.product_link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="taste-btn-dark w-full"
+                  className="taste-btn-secondary w-full"
                 >
-                  <Store className="w-4 h-4 text-[#C4A46B] shrink-0" />
+                  <Store className="w-4 h-4 text-[#7C3219] shrink-0" />
                   <span>Marketplace</span>
                   <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
@@ -973,7 +973,7 @@ export default function PhysicalCatalogBookSection({
   return (
     <section
       id="buku-katalog"
-      className="py-16 lg:py-24 bg-[#EFEAE0] border-t border-[#1C1917]/12 overflow-hidden"
+      className="py-12 lg:py-16 bg-[#EFEAE0] border-t border-[#1C1917]/12 overflow-hidden"
     >
       <style>{`
         .paper-surface {
@@ -997,448 +997,432 @@ export default function PhysicalCatalogBookSection({
 
       <div className="taste-wrap">
         <FadeIn>
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-          <div>
-            <span className="text-[13px] font-medium text-[#7C3219] block mb-2">
+          {/* Judul Section — Dibersihkan dari tombol redundan */}
+          <div className="mb-4">
+            <span className="text-[13px] font-medium text-[#7C3219] block mb-1">
               Buku katalog per sanggar · Pemesanan langsung WhatsApp
             </span>
-            <h2 className="font-serif font-normal text-[clamp(1.85rem,3vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
+            <h2 className="font-serif font-normal text-[clamp(1.75rem,2.8vw,2.45rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
               Buku Katalog — {shop.name}
             </h2>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              disabled={safePage === 0 || Boolean(flipState)}
-              onClick={() => triggerFlip(safePage - 1)}
-              className="taste-btn-secondary whitespace-nowrap shrink-0"
-            >
-              <ChevronLeft className="w-4 h-4 shrink-0" />
-              <span>Sebelumnya</span>
-            </button>
-
-            <span className="min-h-[44px] px-3.5 inline-flex items-center justify-center rounded-md bg-[#FCFBF8] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] tabular-nums whitespace-nowrap shrink-0">
-              {safePage === 0
-                ? 'Sampul Depan'
-                : safePage === backCoverPage
-                ? 'Sampul Belakang'
-                : `Hal. ${(safePage - 1) * 2 + 1}–${(safePage - 1) * 2 + 2}`}
+          {/* Pilihan Buku Per Sanggar UMKM — Warna Aktif Sogan & Nama Tidak Terpotong */}
+          <div className="mb-4">
+            <span className="text-[13px] font-medium text-[#575049] block mb-2">
+              Pilih sanggar UMKM ({shopBooks.length} sanggar aktif)
             </span>
-
-            <button
-              type="button"
-              disabled={safePage === backCoverPage || Boolean(flipState)}
-              onClick={() => triggerFlip(safePage + 1)}
-              className="taste-btn-secondary whitespace-nowrap shrink-0"
-            >
-              <span>Berikutnya</span>
-              <ChevronRight className="w-4 h-4 shrink-0" />
-            </button>
-          </div>
-        </div>
-
-        {/* Pilihan Buku Per Sanggar UMKM */}
-        <div className="mb-5">
-          <span className="text-[13px] font-medium text-[#575049] block mb-2.5">
-            Pilih sanggar UMKM ({shopBooks.length} sanggar aktif)
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-            {shopBooks.map((bk, idx) => {
-              const isSelectedBook = bk.shop.id === shop.id;
-              return (
-                <button
-                  key={bk.shop.id}
-                  type="button"
-                  onClick={() => handleSwitchShopBook(bk.shop.id)}
-                  className={`min-h-[54px] px-3.5 py-2.5 rounded-md border text-left transition-colors flex items-center gap-3 cursor-pointer ${
-                    isSelectedBook
-                      ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
-                      : 'bg-[#FCFBF8] hover:bg-white text-[#1C1917] border-[#1C1917]/15'
-                  }`}
-                >
-                  <span
-                    className={`font-mono text-[13px] tabular-nums shrink-0 ${
-                      isSelectedBook ? 'text-[#C4A46B]' : 'text-[#7C3219]'
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              {shopBooks.map((bk, idx) => {
+                const isSelectedBook = bk.shop.id === shop.id;
+                return (
+                  <button
+                    key={bk.shop.id}
+                    type="button"
+                    onClick={() => handleSwitchShopBook(bk.shop.id)}
+                    className={`min-h-[56px] px-3 py-2 rounded-md border text-left transition-colors flex items-start gap-2.5 cursor-pointer ${
+                      isSelectedBook
+                        ? 'bg-[#7C3219] text-white border-[#7C3219] shadow-sm'
+                        : 'bg-[#FCFBF8] hover:bg-white text-[#1C1917] border-[#1C1917]/15 hover:border-[#7C3219]/40'
                     }`}
                   >
-                    0{idx + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <span className="block text-[14px] font-medium truncate">{bk.shop.name}</span>
                     <span
-                      className={`block text-[13px] truncate ${
-                        isSelectedBook ? 'text-[#B5ACA2]' : 'text-[#575049]'
+                      className={`font-mono text-[12px] tabular-nums shrink-0 mt-0.5 ${
+                        isSelectedBook ? 'text-[#F6EEDB] font-semibold' : 'text-[#B6842C] font-medium'
                       }`}
                     >
-                      {bk.products.length} koleksi
+                      0{idx + 1}
                     </span>
-                  </div>
+                    <div className="min-w-0 flex-1 h-full flex flex-col justify-between gap-1.5">
+                      <span
+                        title={bk.shop.name}
+                        className="block text-[13.5px] font-medium leading-snug truncate"
+                      >
+                        {bk.shop.name}
+                      </span>
+                      <span
+                        className={`block text-[12px] ${
+                          isSelectedBook ? 'text-white/80' : 'text-[#575049]'
+                        }`}
+                      >
+                        {bk.products.length} koleksi
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Daftar Halaman Buku */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-5 pb-3 border-b border-[#1C1917]/12">
+            <button
+              type="button"
+              disabled={Boolean(flipState)}
+              onClick={() => triggerFlip(0)}
+              className={`min-h-[36px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                safePage === 0
+                  ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                  : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
+              }`}
+            >
+              Sampul Depan
+            </button>
+
+            {products.map((p, idx) => {
+              const pageNum = idx + 1;
+              const isActive = safePage === pageNum;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={Boolean(flipState)}
+                  onClick={() => triggerFlip(pageNum)}
+                  className={`min-h-[36px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                    isActive
+                      ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                      : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
+                  }`}
+                >
+                  {idx === 0 ? `Profil & ${p.name}` : `${idx + 1}. ${p.name}`}
                 </button>
               );
             })}
+
+            <button
+              type="button"
+              disabled={Boolean(flipState)}
+              onClick={() => triggerFlip(backCoverPage)}
+              className={`min-h-[36px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                safePage === backCoverPage
+                  ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                  : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
+              }`}
+            >
+              Sampul Belakang
+            </button>
           </div>
-        </div>
-
-        {/* Daftar Halaman Buku */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-6 pb-3 border-b border-[#1C1917]/12">
-          <button
-            type="button"
-            disabled={Boolean(flipState)}
-            onClick={() => triggerFlip(0)}
-            className={`min-h-[38px] px-3.5 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
-              safePage === 0
-                ? 'bg-[#7C3219] text-white border-[#7C3219]'
-                : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
-            }`}
-          >
-            Sampul Depan
-          </button>
-
-          {products.map((p, idx) => {
-            const pageNum = idx + 1;
-            const isActive = safePage === pageNum;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                disabled={Boolean(flipState)}
-                onClick={() => triggerFlip(pageNum)}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
-                  isActive
-                    ? 'bg-[#7C3219] text-white border-[#7C3219]'
-                    : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
-                }`}
-              >
-                {idx === 0 ? `Profil & ${p.name}` : `${idx + 1}. ${p.name}`}
-              </button>
-            );
-          })}
-
-          <button
-            type="button"
-            disabled={Boolean(flipState)}
-            onClick={() => triggerFlip(backCoverPage)}
-            className={`min-h-[38px] px-3.5 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
-              safePage === backCoverPage
-                ? 'bg-[#7C3219] text-white border-[#7C3219]'
-                : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
-            }`}
-          >
-            Sampul Belakang
-          </button>
-        </div>
         </FadeIn>
 
         {/* Panggung 3D Buku Fisik */}
-        <FadeIn variant="scale" delay={140}>
-        <div
-          ref={bookContainerRef}
-          onPointerDown={handleBookPointerDown}
-          onPointerMove={handleBookPointerMove}
-          onPointerUp={handleBookPointerUp}
-          onPointerLeave={handleBookPointerUp}
-          className="book-3d-stage relative mx-auto select-none"
-        >
-          {isFrontCoverTransition ? (
-            <div
-              style={{
-                transform: `translateX(${-(1 - frontOpenAmount) * 25}%)`,
-              }}
-              className="relative mx-auto"
-            >
-              <div className="relative grid grid-cols-1 lg:grid-cols-2 min-h-[560px]">
-                <div className="hidden lg:block pointer-events-none" />
+        <FadeIn variant="scale" delay={120}>
+          <div
+            ref={bookContainerRef}
+            onPointerDown={handleBookPointerDown}
+            onPointerMove={handleBookPointerMove}
+            onPointerUp={handleBookPointerUp}
+            onPointerLeave={handleBookPointerUp}
+            className="book-3d-stage relative mx-auto select-none"
+          >
+            {isFrontCoverTransition ? (
+              <div
+                style={{
+                  transform: `translateX(${-(1 - frontOpenAmount) * 25}%)`,
+                }}
+                className="relative mx-auto"
+              >
+                <div className="relative grid grid-cols-1 lg:grid-cols-2 min-h-[530px]">
+                  <div className="hidden lg:block pointer-events-none" />
 
-                <div className="relative rounded-lg lg:rounded-l-none lg:rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
-                  {renderSpreadSide(frontSpreadTarget, 'right', false)}
-                  <div
-                    className="pointer-events-none absolute inset-0 z-20"
-                    style={{
-                      opacity: Math.max(0, (1 - frontOpenAmount) * 0.55),
-                      background:
-                        'linear-gradient(to right, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
-                    }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    left: '50%',
-                    width: '50%',
-                    transformOrigin: 'left center',
-                    transform: `rotateY(${-frontOpenAmount * 180}deg) skewY(${-frontArch * 1.1}deg)`,
-                  }}
-                  className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
-                >
-                  <div className="book-leaf-face absolute inset-0">
-                    {renderFrontCoverFace(false)}
-                    <div
-                      className="absolute inset-0 rounded-r-lg rounded-l-sm pointer-events-none"
-                      style={{
-                        opacity: frontArch * 0.65,
-                        background:
-                          'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
-                      }}
-                    />
-                  </div>
-
-                  <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]">
-                    {renderSpreadSide(frontSpreadTarget, 'left', false)}
-                    <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{
-                        opacity: frontArch * 0.6,
-                        background:
-                          'linear-gradient(270deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : isBackCoverTransition ? (
-            <div
-              style={{
-                transform: `translateX(${backClosedAmount * 25}%)`,
-              }}
-              className="relative mx-auto"
-            >
-              <div className="relative grid grid-cols-1 lg:grid-cols-2 min-h-[560px]">
-                <div className="relative rounded-lg lg:rounded-r-none lg:rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
-                  {renderSpreadSide(backSpreadTarget, 'left', false)}
-                  <div
-                    className="pointer-events-none absolute inset-0 z-20"
-                    style={{
-                      opacity: Math.max(0, backClosedAmount * 0.55),
-                      background:
-                        'linear-gradient(to left, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
-                    }}
-                  />
-                </div>
-
-                <div className="hidden lg:block pointer-events-none" />
-
-                <div
-                  style={{
-                    left: '0%',
-                    width: '50%',
-                    transformOrigin: 'right center',
-                    transform: `rotateY(${(1 - backClosedAmount) * 180}deg) skewY(${
-                      backArch * 1.1
-                    }deg)`,
-                  }}
-                  className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
-                >
-                  <div className="book-leaf-face absolute inset-0">
-                    {renderBackCoverFace(false)}
-                    <div
-                      className="absolute inset-0 rounded-l-lg rounded-r-sm pointer-events-none"
-                      style={{
-                        opacity: backArch * 0.65,
-                        background:
-                          'linear-gradient(270deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
-                      }}
-                    />
-                  </div>
-
-                  <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]">
-                    {renderSpreadSide(backSpreadTarget, 'right', false)}
-                    <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{
-                        opacity: backArch * 0.6,
-                        background:
-                          'linear-gradient(90deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : safePage === 0 ? (
-            <div className="w-full lg:w-1/2 mx-auto">{renderFrontCoverFace(true)}</div>
-          ) : safePage === backCoverPage ? (
-            <div className="w-full lg:w-1/2 mx-auto">{renderBackCoverFace(true)}</div>
-          ) : (
-            <div className="relative rounded-lg bg-[#2B201A] p-2 sm:p-3 shadow-[0_24px_54px_rgba(24,18,14,0.34)] border border-[#1C1917]/25">
-              <div className="hidden lg:block absolute inset-y-4 left-2 w-2.5 bg-[repeating-linear-gradient(to_right,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-l-sm z-10 shadow-inner" />
-              <div className="hidden lg:block absolute inset-y-4 right-2 w-2.5 bg-[repeating-linear-gradient(to_left,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-r-sm z-10 shadow-inner" />
-
-              <div className="relative grid grid-cols-1 lg:grid-cols-2 rounded-md overflow-hidden bg-[#FAF8F3] min-h-[560px]">
-                <div className="relative border-b lg:border-b-0 lg:border-r border-[#1C1917]/12">
-                  {renderSpreadSide(baseLeftSpread, 'left', !flipState)}
-
-                  {isTurningBetweenSpreads && flipState.direction === 'next' && (
+                  <div className="relative rounded-lg lg:rounded-l-none lg:rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
+                    {renderSpreadSide(frontSpreadTarget, 'right', false)}
                     <div
                       className="pointer-events-none absolute inset-0 z-20"
                       style={{
-                        opacity: Math.max(0, (flipState.progress - 0.35) * 1.1),
+                        opacity: Math.max(0, (1 - frontOpenAmount) * 0.55),
                         background:
-                          'linear-gradient(to left, rgba(28,18,12,0.25) 0%, rgba(44,36,30,0.06) 45%, transparent 100%)',
+                          'linear-gradient(to right, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
                       }}
                     />
-                  )}
-                </div>
+                  </div>
 
-                <div className="relative">
-                  {renderSpreadSide(baseRightSpread, 'right', !flipState)}
-
-                  {isTurningBetweenSpreads && (
-                    <div
-                      className="pointer-events-none absolute inset-0 z-20"
-                      style={{
-                        opacity:
-                          flipState.direction === 'next'
-                            ? Math.max(0, (0.65 - flipState.progress) * 1.1)
-                            : Math.max(0, (flipState.progress - 0.35) * 1.1),
-                        background:
-                          'linear-gradient(to right, rgba(28,18,12,0.28) 0%, rgba(44,36,30,0.08) 45%, transparent 100%)',
-                      }}
-                    />
-                  )}
-                </div>
-
-                <div
-                  className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-14 z-20"
-                  style={{
-                    background:
-                      'linear-gradient(to right, rgba(28,25,23,0) 0%, rgba(28,25,23,0.07) 38%, rgba(24,15,10,0.22) 50%, rgba(28,25,23,0.07) 62%, rgba(28,25,23,0) 100%)',
-                  }}
-                />
-
-                {isTurningBetweenSpreads && (
                   <div
                     style={{
-                      left: flipState.direction === 'next' ? '50%' : '0%',
+                      left: '50%',
                       width: '50%',
-                      transformOrigin:
-                        flipState.direction === 'next' ? 'left center' : 'right center',
-                      transform: `rotateY(${turnAngle}deg) skewY(${
-                        (flipState.direction === 'next' ? -1 : 1) * archIntensity * 1.35
+                      transformOrigin: 'left center',
+                      transform: `rotateY(${-frontOpenAmount * 180}deg) skewY(${-frontArch * 1.1}deg)`,
+                    }}
+                    className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
+                  >
+                    <div className="book-leaf-face absolute inset-0">
+                      {renderFrontCoverFace(false)}
+                      <div
+                        className="absolute inset-0 rounded-r-lg rounded-l-sm pointer-events-none"
+                        style={{
+                          opacity: frontArch * 0.65,
+                          background:
+                            'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
+                        }}
+                      />
+                    </div>
+
+                    <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]">
+                      {renderSpreadSide(frontSpreadTarget, 'left', false)}
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          opacity: frontArch * 0.6,
+                          background:
+                            'linear-gradient(270deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : isBackCoverTransition ? (
+              <div
+                style={{
+                  transform: `translateX(${backClosedAmount * 25}%)`,
+                }}
+                className="relative mx-auto"
+              >
+                <div className="relative grid grid-cols-1 lg:grid-cols-2 min-h-[530px]">
+                  <div className="relative rounded-lg lg:rounded-r-none lg:rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
+                    {renderSpreadSide(backSpreadTarget, 'left', false)}
+                    <div
+                      className="pointer-events-none absolute inset-0 z-20"
+                      style={{
+                        opacity: Math.max(0, backClosedAmount * 0.55),
+                        background:
+                          'linear-gradient(to left, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
+                      }}
+                    />
+                  </div>
+
+                  <div className="hidden lg:block pointer-events-none" />
+
+                  <div
+                    style={{
+                      left: '0%',
+                      width: '50%',
+                      transformOrigin: 'right center',
+                      transform: `rotateY(${(1 - backClosedAmount) * 180}deg) skewY(${
+                        backArch * 1.1
                       }deg)`,
                     }}
                     className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                   >
-                    <div className="book-leaf-face absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-l border-[#1C1917]/15">
-                      {renderSpreadSide(
-                        flipState.fromPage,
-                        flipState.direction === 'next' ? 'right' : 'left',
-                        false
-                      )}
+                    <div className="book-leaf-face absolute inset-0">
+                      {renderBackCoverFace(false)}
                       <div
-                        className="absolute inset-0 pointer-events-none"
+                        className="absolute inset-0 rounded-l-lg rounded-r-sm pointer-events-none"
                         style={{
-                          opacity: 0.25 + archIntensity * 0.75,
+                          opacity: backArch * 0.65,
                           background:
-                            flipState.direction === 'next'
-                              ? `linear-gradient(90deg,
-                                  rgba(25,15,10,0.25) 0%,
-                                  rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
-                                  rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
-                                  rgba(255,255,255,0.22) 100%)`
-                              : `linear-gradient(270deg,
-                                  rgba(25,15,10,0.25) 0%,
-                                  rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
-                                  rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
-                                  rgba(255,255,255,0.22) 100%)`,
+                            'linear-gradient(270deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
                         }}
                       />
                     </div>
 
-                    <div className="book-leaf-face book-leaf-back absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-r border-[#1C1917]/15">
-                      {renderSpreadSide(
-                        flipState.toPage,
-                        flipState.direction === 'next' ? 'left' : 'right',
-                        false
-                      )}
+                    <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]">
+                      {renderSpreadSide(backSpreadTarget, 'right', false)}
                       <div
                         className="absolute inset-0 pointer-events-none"
                         style={{
-                          opacity: 0.25 + archIntensity * 0.75,
+                          opacity: backArch * 0.6,
                           background:
-                            flipState.direction === 'next'
-                              ? `linear-gradient(270deg,
-                                  rgba(25,15,10,0.24) 0%,
-                                  rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
-                                  rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
-                                  rgba(255,255,255,0.18) 100%)`
-                              : `linear-gradient(90deg,
-                                  rgba(25,15,10,0.24) 0%,
-                                  rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
-                                  rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
-                                  rgba(255,255,255,0.18) 100%)`,
+                            'linear-gradient(90deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
                         }}
                       />
                     </div>
                   </div>
-                )}
-
-                {!flipState && (
-                  <button
-                    type="button"
-                    onMouseEnter={() => setCornerHover('left')}
-                    onMouseLeave={() => setCornerHover(null)}
-                    onClick={() => triggerFlip(safePage - 1)}
-                    aria-label={
-                      safePage === 1 ? 'Tutup ke Sampul Depan' : 'Halaman sebelumnya'
-                    }
-                    title={
-                      safePage === 1
-                        ? 'Tutup ke Sampul Depan'
-                        : 'Klik untuk membalik ke halaman sebelumnya'
-                    }
-                    style={{
-                      width: cornerHover === 'left' ? '82px' : '54px',
-                      height: cornerHover === 'left' ? '82px' : '54px',
-                      background:
-                        'linear-gradient(45deg, #E5D7C1 0%, #EFE5D3 44%, #FAF8F3 50%, rgba(28,25,23,0.15) 52%, transparent 56%)',
-                      boxShadow:
-                        cornerHover === 'left'
-                          ? '6px -6px 14px rgba(28,25,23,0.16)'
-                          : '2px -2px 6px rgba(28,25,23,0.08)',
-                    }}
-                    className="hidden lg:flex items-end justify-start p-2.5 absolute bottom-0 left-0 z-30 rounded-tr-md transition-all duration-300 cursor-pointer"
-                  >
-                    <ChevronLeft className="w-4 h-4 text-[#7C3219]" />
-                  </button>
-                )}
-
-                {!flipState && (
-                  <button
-                    type="button"
-                    onMouseEnter={() => setCornerHover('right')}
-                    onMouseLeave={() => setCornerHover(null)}
-                    onClick={() => triggerFlip(safePage + 1)}
-                    aria-label={
-                      safePage === backCoverPage - 1
-                        ? 'Tutup ke Sampul Belakang'
-                        : 'Halaman berikutnya'
-                    }
-                    title={
-                      safePage === backCoverPage - 1
-                        ? 'Tutup ke Sampul Belakang'
-                        : 'Klik untuk membalik ke halaman berikutnya'
-                    }
-                    style={{
-                      width: cornerHover === 'right' ? '82px' : '54px',
-                      height: cornerHover === 'right' ? '82px' : '54px',
-                      background:
-                        'linear-gradient(315deg, #E5D7C1 0%, #EFE5D3 44%, #FAF8F3 50%, rgba(28,25,23,0.15) 52%, transparent 56%)',
-                      boxShadow:
-                        cornerHover === 'right'
-                          ? '-6px -6px 14px rgba(28,25,23,0.16)'
-                          : '-2px -2px 6px rgba(28,25,23,0.08)',
-                    }}
-                    className="hidden lg:flex items-end justify-end p-2.5 absolute bottom-0 right-0 z-30 rounded-tl-md transition-all duration-300 cursor-pointer"
-                  >
-                    <ChevronRight className="w-4 h-4 text-[#7C3219]" />
-                  </button>
-                )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            ) : safePage === 0 ? (
+              <div className="w-full lg:w-1/2 mx-auto">{renderFrontCoverFace(true)}</div>
+            ) : safePage === backCoverPage ? (
+              <div className="w-full lg:w-1/2 mx-auto">{renderBackCoverFace(true)}</div>
+            ) : (
+              <div className="relative rounded-lg bg-[#2B201A] p-2 sm:p-3 shadow-[0_24px_54px_rgba(24,18,14,0.34)] border border-[#1C1917]/25">
+                <div className="hidden lg:block absolute inset-y-4 left-2 w-2.5 bg-[repeating-linear-gradient(to_right,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-l-sm z-10 shadow-inner" />
+                <div className="hidden lg:block absolute inset-y-4 right-2 w-2.5 bg-[repeating-linear-gradient(to_left,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-r-sm z-10 shadow-inner" />
+
+                <div className="relative grid grid-cols-1 lg:grid-cols-2 rounded-md overflow-hidden bg-[#FAF8F3] min-h-[530px]">
+                  <div className="relative border-b lg:border-b-0 lg:border-r border-[#1C1917]/12">
+                    {renderSpreadSide(baseLeftSpread, 'left', !flipState)}
+
+                    {isTurningBetweenSpreads && flipState.direction === 'next' && (
+                      <div
+                        className="pointer-events-none absolute inset-0 z-20"
+                        style={{
+                          opacity: Math.max(0, (flipState.progress - 0.35) * 1.1),
+                          background:
+                            'linear-gradient(to left, rgba(28,18,12,0.25) 0%, rgba(44,36,30,0.06) 45%, transparent 100%)',
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    {renderSpreadSide(baseRightSpread, 'right', !flipState)}
+
+                    {isTurningBetweenSpreads && (
+                      <div
+                        className="pointer-events-none absolute inset-0 z-20"
+                        style={{
+                          opacity:
+                            flipState.direction === 'next'
+                              ? Math.max(0, (0.65 - flipState.progress) * 1.1)
+                              : Math.max(0, (flipState.progress - 0.35) * 1.1),
+                          background:
+                            'linear-gradient(to right, rgba(28,18,12,0.28) 0%, rgba(44,36,30,0.08) 45%, transparent 100%)',
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div
+                    className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-14 z-20"
+                    style={{
+                      background:
+                        'linear-gradient(to right, rgba(28,25,23,0) 0%, rgba(28,25,23,0.07) 38%, rgba(24,15,10,0.22) 50%, rgba(28,25,23,0.07) 62%, rgba(28,25,23,0) 100%)',
+                    }}
+                  />
+
+                  {isTurningBetweenSpreads && (
+                    <div
+                      style={{
+                        left: flipState.direction === 'next' ? '50%' : '0%',
+                        width: '50%',
+                        transformOrigin:
+                          flipState.direction === 'next' ? 'left center' : 'right center',
+                        transform: `rotateY(${turnAngle}deg) skewY(${
+                          (flipState.direction === 'next' ? -1 : 1) * archIntensity * 1.35
+                        }deg)`,
+                      }}
+                      className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
+                    >
+                      <div className="book-leaf-face absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-l border-[#1C1917]/15">
+                        {renderSpreadSide(
+                          flipState.fromPage,
+                          flipState.direction === 'next' ? 'right' : 'left',
+                          false
+                        )}
+                        <div
+                          className="absolute inset-0 pointer-events-none"
+                          style={{
+                            opacity: 0.25 + archIntensity * 0.75,
+                            background:
+                              flipState.direction === 'next'
+                                ? `linear-gradient(90deg,
+                                    rgba(25,15,10,0.25) 0%,
+                                    rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
+                                    rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
+                                    rgba(255,255,255,0.22) 100%)`
+                                : `linear-gradient(270deg,
+                                    rgba(25,15,10,0.25) 0%,
+                                    rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
+                                    rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
+                                    rgba(255,255,255,0.22) 100%)`,
+                          }}
+                        />
+                      </div>
+
+                      <div className="book-leaf-face book-leaf-back absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-r border-[#1C1917]/15">
+                        {renderSpreadSide(
+                          flipState.toPage,
+                          flipState.direction === 'next' ? 'left' : 'right',
+                          false
+                        )}
+                        <div
+                          className="absolute inset-0 pointer-events-none"
+                          style={{
+                            opacity: 0.25 + archIntensity * 0.75,
+                            background:
+                              flipState.direction === 'next'
+                                ? `linear-gradient(270deg,
+                                    rgba(25,15,10,0.24) 0%,
+                                    rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
+                                    rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
+                                    rgba(255,255,255,0.18) 100%)`
+                                : `linear-gradient(90deg,
+                                    rgba(25,15,10,0.24) 0%,
+                                    rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
+                                    rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
+                                    rgba(255,255,255,0.18) 100%)`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {!flipState && (
+                    <button
+                      type="button"
+                      onMouseEnter={() => setCornerHover('left')}
+                      onMouseLeave={() => setCornerHover(null)}
+                      onClick={() => triggerFlip(safePage - 1)}
+                      aria-label={
+                        safePage === 1 ? 'Tutup ke Sampul Depan' : 'Halaman sebelumnya'
+                      }
+                      title={
+                        safePage === 1
+                          ? 'Tutup ke Sampul Depan'
+                          : 'Klik untuk membalik ke halaman sebelumnya'
+                      }
+                      style={{
+                        width: cornerHover === 'left' ? '82px' : '54px',
+                        height: cornerHover === 'left' ? '82px' : '54px',
+                        background:
+                          'linear-gradient(45deg, #E5D7C1 0%, #EFE5D3 44%, #FAF8F3 50%, rgba(28,25,23,0.15) 52%, transparent 56%)',
+                        boxShadow:
+                          cornerHover === 'left'
+                            ? '6px -6px 14px rgba(28,25,23,0.16)'
+                            : '2px -2px 6px rgba(28,25,23,0.08)',
+                      }}
+                      className="hidden lg:flex items-end justify-start p-2.5 absolute bottom-0 left-0 z-30 rounded-tr-md transition-all duration-300 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-[#7C3219]" />
+                    </button>
+                  )}
+
+                  {!flipState && (
+                    <button
+                      type="button"
+                      onMouseEnter={() => setCornerHover('right')}
+                      onMouseLeave={() => setCornerHover(null)}
+                      onClick={() => triggerFlip(safePage + 1)}
+                      aria-label={
+                        safePage === backCoverPage - 1
+                          ? 'Tutup ke Sampul Belakang'
+                          : 'Halaman berikutnya'
+                      }
+                      title={
+                        safePage === backCoverPage - 1
+                          ? 'Tutup ke Sampul Belakang'
+                          : 'Klik untuk membalik ke halaman berikutnya'
+                      }
+                      style={{
+                        width: cornerHover === 'right' ? '82px' : '54px',
+                        height: cornerHover === 'right' ? '82px' : '54px',
+                        background:
+                          'linear-gradient(315deg, #E5D7C1 0%, #EFE5D3 44%, #FAF8F3 50%, rgba(28,25,23,0.15) 52%, transparent 56%)',
+                        boxShadow:
+                          cornerHover === 'right'
+                            ? '-6px -6px 14px rgba(28,25,23,0.16)'
+                            : '-2px -2px 6px rgba(28,25,23,0.08)',
+                      }}
+                      className="hidden lg:flex items-end justify-end p-2.5 absolute bottom-0 right-0 z-30 rounded-tl-md transition-all duration-300 cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4 text-[#7C3219]" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Indikator ringkas di bawah buku */}
+          <div className="mt-4 flex items-center justify-center gap-3 text-[13px] text-[#575049]">
+            <span>
+              Klik atau seret sudut lembar buku untuk membalik halaman ·{' '}
+              <strong className="font-medium text-[#1C1917] tabular-nums">
+                Lembar {safePage + 1} dari {totalBookPages}
+              </strong>
+            </span>
+          </div>
         </FadeIn>
       </div>
     </section>

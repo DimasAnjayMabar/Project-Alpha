@@ -33,6 +33,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 PUBLIC_EXACT_PATHS = {
     "/auth/google/login",
     "/auth/google/callback",
+    "/auth/pending",
     "/auth/logout",
     "/shop/register",
     "/chatbot/question",
@@ -45,9 +46,6 @@ PUBLIC_EXACT_PATHS = {
 
 # Rute publik khusus method GET/HEAD (tidak meloloskan POST/PATCH/DELETE)
 PUBLIC_READ_EXACT_PATHS = {
-    "/shop",
-    "/product",
-    "/product/categories",
     "/shop",
     "/product",
     "/product/categories",

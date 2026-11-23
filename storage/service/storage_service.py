@@ -17,8 +17,12 @@ from config import (
     MAX_DISPLAY_FILES_PER_REQUEST,
     MAX_DISPLAY_SIZE_BYTES,
     MAX_MOCKUP_SIZE_BYTES,
+    MAX_SHOP_PROFILE_SIZE_BYTES,
     MOCKUP_DIR,
     PRODUCT_UPLOAD_ROOT,
+    SHOP_PROFILE_DIR,
+    SHOP_PROFILE_MAX_DIMENSION,
+    SHOP_PROFILE_WEBP_QUALITY,
     STORAGE_PORT,
     ensure_storage_dirs,
 )
@@ -33,6 +37,7 @@ from service.exceptions import (
 logger = logging.getLogger("storage.service")
 
 IncomingFile = Tuple[str, Optional[str], bytes]
+ALLOWED_UPLOAD_ROOTS = (PRODUCT_UPLOAD_ROOT, SHOP_PROFILE_DIR)
 
 
 def _slugify_prefix(value: Optional[str], fallback: str = "img") -> str:
@@ -86,13 +91,13 @@ def _build_file_metadata(file_path: Path, width: int, height: int) -> dict:
     }
 
 
-def _resolve_safe_product_path(relative_path: str) -> Path:
+def _resolve_safe_upload_path(relative_path: str) -> Path:
     cleaned = (relative_path or "").strip().lstrip("/").replace("\\", "/")
     if not cleaned:
         raise ValidationError("Path file tidak boleh kosong.")
 
     target = (BASE_DIR / cleaned).resolve()
-    if not target.is_relative_to(PRODUCT_UPLOAD_ROOT):
+    if not any(target.is_relative_to(root) for root in ALLOWED_UPLOAD_ROOTS):
         raise ValidationError(f"Path tidak diizinkan: '{relative_path}'")
     return target
 
@@ -146,12 +151,8 @@ def save_mockup_image(
     content_type: Optional[str],
     raw_bytes: bytes,
     prefix: Optional[str] = None,
-    output_format: str = "webp",
 ) -> dict:
-    fmt = (output_format or "webp").lower()
-    if fmt not in ("webp", "png"):
-        raise ValidationError("output_format hanya mendukung 'webp' atau 'png'.")
-
+    """Simpan gambar mockup 3D sebagai WebP lossless tanpa resize paksa."""
     ensure_storage_dirs()
     label = filename or "mockup"
     _validate_content_type(content_type, label)
@@ -161,16 +162,17 @@ def save_mockup_image(
         img = _normalize_color_mode(img)
 
         safe_prefix = _slugify_prefix(prefix, fallback="mockup")
-        out_name = f"{safe_prefix}-{uuid4().hex[:12]}.{fmt}"
+        out_name = f"{safe_prefix}-{uuid4().hex[:12]}.webp"
         out_path = MOCKUP_DIR / out_name
-
-        if fmt == "png":
-            img.save(out_path, format="PNG", optimize=True)
-        else:
-            img.save(out_path, format="WEBP", lossless=True, quality=100)
+        img.save(out_path, format="WEBP", lossless=True, quality=100)
 
         meta = _build_file_metadata(out_path, img.width, img.height)
-        logger.info("[Upload Mockup] tersimpan: %s (%dx%d)", meta["image_url"], img.width, img.height)
+        logger.info(
+            "[Upload Mockup] tersimpan: %s (%dx%d)",
+            meta["image_url"],
+            img.width,
+            img.height,
+        )
         return meta
 
     except Exception as e:
@@ -179,8 +181,44 @@ def save_mockup_image(
         raise StorageException(f"Gagal menyimpan gambar mockup: {str(e)}", status_code=500)
 
 
+def save_shop_profile_image(
+    filename: str,
+    content_type: Optional[str],
+    raw_bytes: bytes,
+    prefix: Optional[str] = None,
+) -> dict:
+    """Simpan logo/profil toko UMKM sebagai WebP (maks 512x512, transparansi terjaga)."""
+    ensure_storage_dirs()
+    label = filename or "shop-profile"
+    _validate_content_type(content_type, label)
+
+    try:
+        img = _open_and_validate_image(raw_bytes, MAX_SHOP_PROFILE_SIZE_BYTES, label)
+        img = _normalize_color_mode(img)
+        img.thumbnail(SHOP_PROFILE_MAX_DIMENSION, Image.Resampling.LANCZOS)
+
+        safe_prefix = _slugify_prefix(prefix, fallback="shop")
+        out_name = f"{safe_prefix}-{uuid4().hex[:12]}.webp"
+        out_path = SHOP_PROFILE_DIR / out_name
+        img.save(out_path, format="WEBP", quality=SHOP_PROFILE_WEBP_QUALITY, method=4)
+
+        meta = _build_file_metadata(out_path, img.width, img.height)
+        logger.info(
+            "[Upload Shop Profile] tersimpan: %s (%dx%d)",
+            meta["image_url"],
+            img.width,
+            img.height,
+        )
+        return meta
+
+    except Exception as e:
+        if isinstance(e, StorageException):
+            raise e
+        raise StorageException(f"Gagal menyimpan logo toko: {str(e)}", status_code=500)
+
+
 def resolve_existing_file(relative_path: str) -> Path:
-    target = _resolve_safe_product_path(relative_path)
+    target = _resolve_safe_upload_path(relative_path)
     if not target.exists() or not target.is_file():
         raise NotFoundError(f"File '{relative_path}' tidak ditemukan.")
     return target
@@ -195,7 +233,7 @@ def delete_files(paths: List[str]) -> dict:
 
     try:
         for rel_path in paths:
-            target = _resolve_safe_product_path(rel_path)
+            target = _resolve_safe_upload_path(rel_path)
             if target.exists() and target.is_file():
                 target.unlink()
                 deleted.append(rel_path)
@@ -217,4 +255,5 @@ def get_storage_health() -> dict:
         "port": STORAGE_PORT,
         "display_dir": str(DISPLAY_DIR),
         "mockup_dir": str(MOCKUP_DIR),
+        "shop_profile_dir": str(SHOP_PROFILE_DIR),
     }

@@ -3,6 +3,332 @@ import { INITIAL_DATABASE } from '../../user/data/databaseSeed';
 export const DB_STORAGE_KEY = 'batik_wicara_db_v1';
 export const SELLER_SESSION_KEY = 'batik_wicara_seller_session_v1';
 
+export const BACKEND_BASE_URL = String(
+  import.meta.env.BACKEND_BASE_URL || 'http://localhost:3002'
+).replace(/\/+$/, '');
+
+// =========================================================================
+// HELPER PARSE RESPONS BACKEND (PORT 3002 — HTTPONLY COOKIE)
+// =========================================================================
+
+async function parseApiResponse(response, fallbackMessage) {
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    let message = fallbackMessage;
+    if (payload) {
+      if (typeof payload.message === 'string' && payload.message.trim()) {
+        message = payload.message;
+      } else if (typeof payload.detail === 'string' && payload.detail.trim()) {
+        message = payload.detail;
+      } else if (Array.isArray(payload.detail) && payload.detail.length > 0) {
+        message = payload.detail
+          .map((item) => item?.msg || String(item))
+          .filter(Boolean)
+          .join(', ');
+      }
+    }
+    const err = new Error(message);
+    err.status = response.status;
+    err.payload = payload;
+    throw err;
+  }
+
+  return payload;
+}
+
+// =========================================================================
+// 1. AUTENTIKASI, REGISTRASI & PROFIL TOKO
+// =========================================================================
+
+export function getGoogleLoginUrl() {
+  return `${BACKEND_BASE_URL}/auth/google/login`;
+}
+
+export async function fetchPendingRegistration() {
+  const response = await fetch(`${BACKEND_BASE_URL}/auth/pending`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const payload = await parseApiResponse(
+    response,
+    'Sesi pendaftaran tidak ditemukan atau sudah berakhir.'
+  );
+  return payload?.data || null;
+}
+
+export async function registerSellerShop(shopForm, profileImageFile = null) {
+  const formData = new FormData();
+  formData.append('name', String(shopForm.name || '').trim());
+
+  const optionalTextFields = [
+    'address',
+    'number',
+    'instagram',
+    'online_shop',
+    'gmaps',
+    'description',
+  ];
+
+  optionalTextFields.forEach((field) => {
+    const val = String(shopForm[field] ?? '').trim();
+    if (val) {
+      formData.append(field, val);
+    }
+  });
+
+  if (profileImageFile) {
+    formData.append('profile_image', profileImageFile);
+  }
+
+  const response = await fetch(`${BACKEND_BASE_URL}/shop/register`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const payload = await parseApiResponse(
+    response,
+    'Gagal mendaftarkan sanggar. Periksa kembali data yang diisi.'
+  );
+  return payload?.data || null;
+}
+
+export async function fetchMyShop() {
+  const response = await fetch(`${BACKEND_BASE_URL}/shop/me`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const payload = await parseApiResponse(response, 'Sesi login tidak ditemukan.');
+  return payload?.data || null;
+}
+
+export async function updateMyShop(
+  shopForm,
+  { profileImageFile = null, removeProfile = false } = {}
+) {
+  const formData = new FormData();
+  formData.append('name', String(shopForm.name || '').trim());
+  formData.append('address', String(shopForm.address ?? '').trim());
+  formData.append('number', String(shopForm.number ?? '').trim());
+  formData.append('instagram', String(shopForm.instagram ?? '').trim());
+  formData.append('online_shop', String(shopForm.online_shop ?? '').trim());
+  formData.append('gmaps', String(shopForm.gmaps ?? '').trim());
+  formData.append('description', String(shopForm.description ?? '').trim());
+
+  if (typeof shopForm.active_status === 'boolean') {
+    formData.append('active_status', String(shopForm.active_status));
+  }
+
+  formData.append('remove_profile', String(Boolean(removeProfile && !profileImageFile)));
+
+  if (profileImageFile) {
+    formData.append('profile_image', profileImageFile);
+  }
+
+  const response = await fetch(`${BACKEND_BASE_URL}/shop/me`, {
+    method: 'PATCH',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const payload = await parseApiResponse(
+    response,
+    'Gagal memperbarui profil sanggar. Periksa kembali data yang diisi.'
+  );
+  return payload?.data || null;
+}
+
+export async function logoutSeller() {
+  const response = await fetch(`${BACKEND_BASE_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  return parseApiResponse(response, 'Gagal keluar dari sesi.');
+}
+
+// =========================================================================
+// 2. KATEGORI & CRUD PRODUK SELLER (BACKEND 3002 -> STORAGE 3003)
+// =========================================================================
+
+export async function fetchProductCategories() {
+  const response = await fetch(`${BACKEND_BASE_URL}/product/categories`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const payload = await parseApiResponse(response, 'Gagal memuat daftar kategori.');
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+export async function fetchMyProducts({
+  q = '',
+  activeStatus = null,
+  categorySlug = '',
+  page = 1,
+  limit = 100,
+} = {}) {
+  const params = new URLSearchParams();
+  if (q && q.trim()) params.set('q', q.trim());
+  if (typeof activeStatus === 'boolean') params.set('active_status', String(activeStatus));
+  if (categorySlug && categorySlug !== 'ALL') params.set('category_slug', categorySlug);
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+
+  const response = await fetch(`${BACKEND_BASE_URL}/product/me?${params.toString()}`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const payload = await parseApiResponse(response, 'Gagal memuat daftar produk sanggar.');
+  return {
+    items: Array.isArray(payload?.data?.items) ? payload.data.items : [],
+    pagination: payload?.data?.pagination || {
+      page,
+      limit,
+      total: 0,
+      total_pages: 0,
+    },
+  };
+}
+
+/**
+ * Menambahkan produk baru beserta multiple display_images & single mockup_image (POST /product).
+ */
+export async function createSellerProductApi(
+  productInput,
+  { displayFiles = [], mockupFile = null } = {}
+) {
+  const formData = new FormData();
+  formData.append('name', String(productInput.name || '').trim());
+  formData.append('price', String(Number(productInput.price) || 0));
+
+  if (productInput.category_id) {
+    formData.append('category_id', String(productInput.category_id));
+  }
+  if (productInput.description !== undefined && productInput.description !== null) {
+    formData.append('description', String(productInput.description).trim());
+  }
+  if (productInput.additional_attribute) {
+    formData.append('additional_attribute', JSON.stringify(productInput.additional_attribute));
+  }
+  formData.append('active_status', String(productInput.active_status !== false));
+  if (productInput.product_link && String(productInput.product_link).trim()) {
+    formData.append('product_link', String(productInput.product_link).trim());
+  }
+  formData.append('mockup_output_format', 'webp');
+
+  (displayFiles || []).forEach((file) => {
+    if (file) formData.append('display_images', file);
+  });
+
+  if (mockupFile) {
+    formData.append('mockup_image', mockupFile);
+  }
+
+  const response = await fetch(`${BACKEND_BASE_URL}/product`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const payload = await parseApiResponse(
+    response,
+    'Gagal menerbitkan produk baru. Periksa kembali isian dan gambar.'
+  );
+  return payload?.data || null;
+}
+
+/**
+ * Memperbarui produk + sinkronisasi tambah/hapus gambar di storage 3003 (PATCH /product/{id}).
+ */
+export async function updateSellerProductApi(
+  productId,
+  productInput,
+  {
+    newDisplayFiles = [],
+    deleteDisplayImageIds = [],
+    displayImageOrders = [],
+    newMockupFile = null,
+    removeMockup = false,
+  } = {}
+) {
+  const formData = new FormData();
+  formData.append('name', String(productInput.name || '').trim());
+  formData.append('price', String(Number(productInput.price) || 0));
+
+  if (productInput.category_id) {
+    formData.append('category_id', String(productInput.category_id));
+  }
+  formData.append('description', String(productInput.description ?? '').trim());
+  formData.append(
+    'additional_attribute',
+    JSON.stringify(productInput.additional_attribute || {})
+  );
+  formData.append('active_status', String(productInput.active_status !== false));
+  formData.append('product_link', String(productInput.product_link ?? '').trim());
+  formData.append('mockup_output_format', 'webp');
+  formData.append('remove_mockup', String(Boolean(removeMockup && !newMockupFile)));
+
+  if (Array.isArray(deleteDisplayImageIds) && deleteDisplayImageIds.length > 0) {
+    formData.append('delete_display_image_ids', JSON.stringify(deleteDisplayImageIds));
+  }
+
+  if (Array.isArray(displayImageOrders) && displayImageOrders.length > 0) {
+    formData.append('display_image_orders', JSON.stringify(displayImageOrders));
+  }
+
+  (newDisplayFiles || []).forEach((file) => {
+    if (file) formData.append('new_display_images', file);
+  });
+
+  if (newMockupFile) {
+    formData.append('new_mockup_image', newMockupFile);
+  }
+
+  const response = await fetch(`${BACKEND_BASE_URL}/product/${productId}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const payload = await parseApiResponse(
+    response,
+    'Gagal memperbarui produk. Periksa kembali isian dan gambar.'
+  );
+  return payload?.data || null;
+}
+
+export async function updateProductStatus(productId, activeStatus) {
+  const response = await fetch(`${BACKEND_BASE_URL}/product/${productId}/status`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ active_status: Boolean(activeStatus) }),
+  });
+  const payload = await parseApiResponse(response, 'Gagal mengubah status produk.');
+  return payload?.data || null;
+}
+
+export async function deleteSellerProductApi(productId, permanent = true) {
+  const params = new URLSearchParams({ permanent: String(Boolean(permanent)) });
+  const response = await fetch(`${BACKEND_BASE_URL}/product/${productId}?${params.toString()}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  const payload = await parseApiResponse(response, 'Gagal menghapus produk.');
+  return payload?.data || null;
+}
+
+// =========================================================================
+// 3. HELPER LOCALSTORAGE LAMA (SEMENTARA UNTUK /user DI App.jsx HINGGA TAHAP 3)
+// =========================================================================
+
 export function loadSharedDatabase() {
   try {
     const raw = localStorage.getItem(DB_STORAGE_KEY);
@@ -31,282 +357,4 @@ export function saveSharedDatabase(db) {
   } catch (err) {
     console.error('Gagal menyimpan database ke localStorage:', err);
   }
-}
-
-export function getSavedSellerAccountId() {
-  try {
-    return localStorage.getItem(SELLER_SESSION_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveSellerSession(accountId) {
-  try {
-    if (accountId) {
-      localStorage.setItem(SELLER_SESSION_KEY, accountId);
-    } else {
-      localStorage.removeItem(SELLER_SESSION_KEY);
-    }
-  } catch {
-    // Abaikan jika storage diblokir
-  }
-}
-
-/**
- * Autentikasi akun penjual berdasarkan email dan sandi/PIN sanggar.
- * Catatan: Untuk akun seed awal, sandi default demo adalah "123456".
- */
-export function authenticateSeller(db, email, password) {
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (!normalizedEmail) {
-    throw new Error('Masukkan alamat email pengelola sanggar.');
-  }
-
-  const account = (db.account || []).find(
-    (acc) => acc.email.toLowerCase() === normalizedEmail && acc.role === 'penjual'
-  );
-
-  if (!account) {
-    throw new Error('Akun penjual dengan email tersebut tidak ditemukan.');
-  }
-
-  const expectedPass = account.password || '123456';
-  if (password !== expectedPass) {
-    throw new Error('Kata sandi / PIN sanggar tidak sesuai.');
-  }
-
-  const shop = (db.shop || []).find((s) => s.account_id === account.id);
-  if (!shop) {
-    throw new Error('Akun ini belum terhubung dengan data toko UMKM.');
-  }
-
-  return { account, shop };
-}
-
-/**
- * Mendaftarkan akun penjual + toko UMKM baru (relasi 1:1).
- */
-export function registerNewSeller(db, payload) {
-  const email = String(payload.email || '').trim().toLowerCase();
-  const displayName = String(payload.displayName || '').trim();
-  const password = String(payload.password || '').trim();
-  const shopName = String(payload.shopName || '').trim();
-  const address = String(payload.address || '').trim();
-  const whatsapp = String(payload.whatsapp || '').replace(/\D/g, '');
-  const description = String(payload.description || '').trim();
-
-  if (!email || !displayName || !password || !shopName || !address || !whatsapp) {
-    throw new Error('Harap lengkapi semua kolom wajib pendaftaran sanggar.');
-  }
-
-  const emailExists = (db.account || []).some((a) => a.email.toLowerCase() === email);
-  if (emailExists) {
-    throw new Error('Email tersebut sudah terdaftar. Silakan langsung masuk (Login).');
-  }
-
-  const now = new Date().toISOString();
-  const newAccountId = `acc-${Date.now()}`;
-  const newShopId = `shop-${Date.now()}`;
-
-  const normalizedWa = whatsapp.startsWith('0')
-    ? `62${whatsapp.slice(1)}`
-    : whatsapp.startsWith('62')
-    ? whatsapp
-    : `62${whatsapp}`;
-
-  const newAccount = {
-    id: newAccountId,
-    email,
-    password,
-    oauth_provider: 'email',
-    oauth_id: `local|${newAccountId}`,
-    display_name: displayName,
-    profile: '',
-    role: 'penjual',
-    created_at: now,
-  };
-
-  const newShop = {
-    id: newShopId,
-    account_id: newAccountId,
-    name: shopName,
-    address,
-    number: normalizedWa,
-    instagram: '',
-    online_shop: '',
-    gmaps: `https://maps.google.com/?q=${encodeURIComponent(shopName + ' Trenggalek')}`,
-    description:
-      description ||
-      `Sentra perajin ${shopName} yang melestarikan wastra batik khas Kabupaten Trenggalek.`,
-    active_status: true,
-  };
-
-  const updatedDb = {
-    ...db,
-    account: [...(db.account || []), newAccount],
-    shop: [...(db.shop || []), newShop],
-  };
-
-  return { updatedDb, account: newAccount, shop: newShop };
-}
-
-/**
- * GUARD KEAMANAN: Memastikan akun yang sedang login adalah pemilik sah toko
- * dan (jika ada targetProductId) pemilik sah produk tersebut.
- */
-export function verifyOwnership(db, currentAccountId, targetProductId = null) {
-  if (!currentAccountId) {
-    throw new Error('Sesi login tidak valid. Silakan masuk terlebih dahulu.');
-  }
-
-  const myShop = (db.shop || []).find((s) => s.account_id === currentAccountId);
-  if (!myShop) {
-    throw new Error('Akses ditolak: Anda tidak memiliki sanggar UMKM yang terdaftar.');
-  }
-
-  if (targetProductId) {
-    const targetProduct = (db.product || []).find((p) => p.id === targetProductId);
-    if (!targetProduct) {
-      throw new Error('Produk tidak ditemukan di database.');
-    }
-    if (targetProduct.shop_id !== myShop.id) {
-      throw new Error(
-        'AKSES DITOLAK: Anda tidak diizinkan mengubah atau menghapus katalog milik UMKM lain!'
-      );
-    }
-  }
-
-  return { myShop };
-}
-
-/**
- * Menambahkan produk baru khusus ke toko milik seller yang sedang login.
- */
-export function createSellerProduct(db, currentAccountId, productInput, imageUrls = []) {
-  const { myShop } = verifyOwnership(db, currentAccountId);
-  const now = new Date().toISOString();
-  const newProductId = `prod-${Date.now()}`;
-
-  const newProduct = {
-    id: newProductId,
-    shop_id: myShop.id, // Dikunci ke toko milik user yang login
-    category_id: productInput.category_id,
-    name: String(productInput.name || '').trim(),
-    price: Number(productInput.price) || 0,
-    description: String(productInput.description || '').trim(),
-    additional_attribute: productInput.additional_attribute || {},
-    active_status: productInput.active_status !== false,
-    product_link: String(productInput.product_link || '').trim(),
-    created_at: now,
-    updated_at: now,
-  };
-
-  const cleanUrls = imageUrls.map((u) => String(u || '').trim()).filter(Boolean);
-  const newDisplayImages = cleanUrls.map((url, idx) => ({
-    id: `img-${Date.now()}-${idx + 1}`,
-    product_id: newProductId,
-    image_url: url,
-    order: idx + 1,
-    created_at: now,
-  }));
-
-  return {
-    ...db,
-    product: [newProduct, ...(db.product || [])],
-    product_display_image: [...(db.product_display_image || []), ...newDisplayImages],
-  };
-}
-
-/**
- * Memperbarui produk milik seller yang sedang login (ditolak jika milik toko lain).
- */
-export function updateSellerProduct(db, currentAccountId, productId, productInput, imageUrls = []) {
-  const { myShop } = verifyOwnership(db, currentAccountId, productId);
-  const now = new Date().toISOString();
-
-  const updatedProducts = (db.product || []).map((p) => {
-    if (p.id !== productId) return p;
-    return {
-      ...p,
-      shop_id: myShop.id, // Tetap terkunci pada toko pemilik
-      category_id: productInput.category_id,
-      name: String(productInput.name || '').trim(),
-      price: Number(productInput.price) || 0,
-      description: String(productInput.description || '').trim(),
-      additional_attribute: productInput.additional_attribute || {},
-      active_status: productInput.active_status !== false,
-      product_link: String(productInput.product_link || '').trim(),
-      updated_at: now,
-    };
-  });
-
-  const cleanUrls = imageUrls.map((u) => String(u || '').trim()).filter(Boolean);
-  const remainingImages = (db.product_display_image || []).filter(
-    (img) => img.product_id !== productId
-  );
-  const replacementImages = cleanUrls.map((url, idx) => ({
-    id: `img-${Date.now()}-${idx + 1}`,
-    product_id: productId,
-    image_url: url,
-    order: idx + 1,
-    created_at: now,
-  }));
-
-  return {
-    ...db,
-    product: updatedProducts,
-    product_display_image: [...remainingImages, ...replacementImages],
-  };
-}
-
-/**
- * Menghapus produk milik seller yang sedang login (ditolak jika milik toko lain).
- */
-export function deleteSellerProduct(db, currentAccountId, productId) {
-  verifyOwnership(db, currentAccountId, productId);
-
-  return {
-    ...db,
-    product: (db.product || []).filter((p) => p.id !== productId),
-    product_display_image: (db.product_display_image || []).filter(
-      (img) => img.product_id !== productId
-    ),
-    product_mockup_image: (db.product_mockup_image || []).filter(
-      (mock) => mock.product_id !== productId
-    ),
-  };
-}
-
-/**
- * Memperbarui profil sanggar milik seller yang sedang login.
- */
-export function updateSellerShop(db, currentAccountId, shopInput) {
-  const { myShop } = verifyOwnership(db, currentAccountId);
-  const digits = String(shopInput.number || myShop.number).replace(/\D/g, '');
-  const normalizedWa = digits.startsWith('0')
-    ? `62${digits.slice(1)}`
-    : digits.startsWith('62')
-    ? digits
-    : `62${digits}`;
-
-  const updatedShops = (db.shop || []).map((s) => {
-    if (s.id !== myShop.id) return s;
-    return {
-      ...s,
-      name: String(shopInput.name || s.name).trim(),
-      address: String(shopInput.address || s.address).trim(),
-      number: normalizedWa,
-      instagram: String(shopInput.instagram || '').trim(),
-      online_shop: String(shopInput.online_shop || '').trim(),
-      gmaps: String(shopInput.gmaps || '').trim(),
-      description: String(shopInput.description || '').trim(),
-      active_status: shopInput.active_status !== false,
-    };
-  });
-
-  return {
-    ...db,
-    shop: updatedShops,
-  };
 }
