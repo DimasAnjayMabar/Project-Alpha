@@ -8,12 +8,11 @@ import {
   MapPin,
   Phone,
   Edit3,
-  Award,
-  Bookmark,
   ExternalLink,
   Store,
   User,
 } from 'lucide-react';
+import FadeIn from '../../components/FadeIn';
 import ProductArtwork from './ProductArtwork';
 import {
   formatRupiah,
@@ -21,7 +20,7 @@ import {
   buildProductOrderWaUrl,
 } from '../utils/helpers';
 
-function InstagramIcon({ className = 'w-3.5 h-3.5' }) {
+function InstagramIcon({ className = 'w-4 h-4' }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -31,6 +30,7 @@ function InstagramIcon({ className = 'w-3.5 h-3.5' }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      aria-hidden="true"
     >
       <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
       <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
@@ -126,10 +126,19 @@ export default function PhysicalCatalogBookSection({
     (targetPage) => {
       const clamped = Math.max(0, Math.min(backCoverPage, targetPage));
       if (clamped === safePage || flipState) return;
+      if (
+        typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ) {
+        setEditingWa(false);
+        setCornerHover(null);
+        onChangeBookPage(clamped);
+        return;
+      }
       const direction = clamped > safePage ? 'next' : 'prev';
       animatePaperFlip(direction, safePage, clamped, 0, true);
     },
-    [safePage, backCoverPage, flipState, animatePaperFlip]
+    [safePage, backCoverPage, flipState, animatePaperFlip, onChangeBookPage]
   );
 
   const handleSwitchShopBook = (shopId) => {
@@ -146,6 +155,8 @@ export default function PhysicalCatalogBookSection({
   const { shop, account, products } = activeBook;
   const shopWa = getEffectiveWa(shop.id, shop.number);
   const leadProduct = products[0] || null;
+  const minShopPrice =
+    products.length > 0 ? Math.min(...products.map((p) => Number(p.price) || 0)) : 0;
 
   const handleBookPointerDown = (e) => {
     if (flipState) return;
@@ -256,50 +267,49 @@ export default function PhysicalCatalogBookSection({
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       onKeyDown={(e) => interactive && e.key === 'Enter' && triggerFlip(1)}
-      className="group relative h-full min-h-[560px] rounded-r-3xl rounded-l-lg bg-gradient-to-br from-[#3A1D12] via-[#2B150D] to-[#1D0E08] text-amber-100 p-6 sm:p-10 border-2 border-[#B8860B]/65 shadow-[18px_22px_45px_rgba(30,18,10,0.45)] cursor-pointer overflow-hidden flex flex-col justify-between"
+      className="group relative h-full min-h-[560px] rounded-r-lg rounded-l-sm bg-[#1F1814] text-[#F5F1E8] p-6 sm:p-10 border border-[#C4A46B]/40 shadow-[14px_18px_38px_rgba(24,18,14,0.34)] cursor-pointer overflow-hidden flex flex-col justify-between"
     >
-      <div className="absolute inset-y-0 left-0 w-7 bg-gradient-to-r from-black/70 via-amber-950/40 to-transparent border-r border-amber-400/25 pointer-events-none" />
-      <div className="absolute inset-y-0 left-7 w-1.5 bg-black/35 pointer-events-none" />
-      <div className="absolute inset-y-2.5 right-0 w-3 bg-[repeating-linear-gradient(to_left,#E6DAC5_0px,#F9F5EC_1px,#CFC0A8_2px)] rounded-r-2xl opacity-95 pointer-events-none" />
+      <div className="absolute inset-y-0 left-0 w-6 bg-black/35 border-r border-[#C4A46B]/20 pointer-events-none" />
+      <div className="absolute inset-y-3 right-0 w-2.5 bg-[repeating-linear-gradient(to_left,#E6DEC8_0px,#FAF8F3_1px,#D4C8B2_2px)] rounded-r-sm opacity-95 pointer-events-none" />
 
-      <div className="relative ml-4 flex-1 border-2 border-amber-400/50 rounded-2xl p-6 sm:p-8 flex flex-col justify-between bg-[radial-gradient(circle_at_top,rgba(212,160,56,0.16),transparent_65%)]">
-        <div className="text-center space-y-2">
-          <span className="inline-block px-3 py-1 rounded-full border border-amber-400/40 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300">
-            Katalog Resmi Sanggar • Kabupaten Trenggalek
+      <div className="relative ml-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-6 sm:p-8 flex flex-col justify-between">
+        <div className="text-center space-y-2.5">
+          <span className="inline-block text-[13px] font-medium text-[#C4A46B]">
+            Katalog Resmi Sanggar · Kabupaten Trenggalek
           </span>
-          <h3 className="font-serif text-2xl sm:text-3xl font-bold text-amber-200 tracking-wide pt-2 leading-snug">
+          <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#F5F1E8] tracking-[-0.02em] leading-snug pt-1">
             {shop.name}
           </h3>
-          <p className="text-xs text-amber-100/75 max-w-sm mx-auto leading-relaxed">
+          <p className="text-[14px] text-[#B5ACA2] max-w-sm mx-auto leading-relaxed">
             {shop.address}
           </p>
         </div>
 
-        <div className="my-4 mx-auto w-40 h-40 sm:w-44 sm:h-44 rounded-full p-2 border-2 border-amber-400/60 shadow-inner bg-[#1F100A]">
+        <div className="my-5 mx-auto w-56 sm:w-64 aspect-[4/3] rounded-sm overflow-hidden border border-[#C4A46B]/35 bg-[#1B1714]">
           {leadProduct && (
             <ProductArtwork
               product={leadProduct}
               imageUrl={leadProduct.primaryImageUrl}
-              size={240}
-              className="w-full h-full rounded-full"
+              size={320}
+              className="w-full h-full"
             />
           )}
         </div>
 
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-3.5">
           {account && (
-            <p className="text-[11px] text-amber-200/80">
-              Pengelola Sanggar: <span className="font-bold">{account.display_name}</span>
+            <p className="text-[13px] text-[#B5ACA2]">
+              Pengelola sanggar:{' '}
+              <span className="font-medium text-[#F5F1E8]">{account.display_name}</span>
             </p>
           )}
-          <p className="text-xs text-amber-100/80 font-serif italic">
-            Memuat {products.length} Koleksi Produk Aktif
-            {products.length > 0 &&
-              ` • Mulai ${formatRupiah(Math.min(...products.map((p) => Number(p.price))))}`}
+          <p className="text-[14px] text-[#F5F1E8]/90 font-serif italic tabular-nums">
+            {products.length} koleksi aktif
+            {products.length > 0 && ` · Mulai ${formatRupiah(minShopPrice)}`}
           </p>
-          <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-amber-400 group-hover:bg-amber-300 text-[#2C241E] text-xs font-bold shadow-md transition-colors">
-            <BookOpen className="w-4 h-4" />
-            <span>Buka Buku Katalog &rarr;</span>
+          <div className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-md bg-[#FCFBF8] group-hover:bg-[#EFEAE0] text-[#1C1917] text-[14px] font-medium transition-colors">
+            <BookOpen className="w-4 h-4 text-[#7C3219]" />
+            <span>Buka Buku Katalog</span>
           </div>
         </div>
       </div>
@@ -308,9 +318,9 @@ export default function PhysicalCatalogBookSection({
         <div
           style={{
             background:
-              'linear-gradient(315deg, #D9C4A3 0%, #EFE2CC 44%, #FFFDF8 50%, rgba(0,0,0,0.35) 53%, transparent 58%)',
+              'linear-gradient(315deg, #D9CBB4 0%, #EFE6D5 44%, #FAF8F3 50%, rgba(0,0,0,0.3) 53%, transparent 58%)',
           }}
-          className="w-11 h-11 absolute bottom-0 right-0 rounded-tl-xl opacity-85 group-hover:w-14 group-hover:h-14 transition-all pointer-events-none"
+          className="w-11 h-11 absolute bottom-0 right-0 opacity-85 group-hover:w-14 group-hover:h-14 transition-all pointer-events-none"
         />
       )}
     </div>
@@ -319,39 +329,38 @@ export default function PhysicalCatalogBookSection({
   const renderBackCoverFace = (interactive = true) => {
     const lastProduct = products[products.length - 1] || leadProduct;
     return (
-      <div className="group relative h-full min-h-[560px] rounded-l-3xl rounded-r-lg bg-gradient-to-bl from-[#3A1D12] via-[#2B150D] to-[#1D0E08] text-amber-100 p-6 sm:p-10 border-2 border-[#B8860B]/65 shadow-[-18px_22px_45px_rgba(30,18,10,0.45)] overflow-hidden flex flex-col justify-between cursor-pointer">
-        <div className="absolute inset-y-0 right-0 w-7 bg-gradient-to-l from-black/70 via-amber-950/40 to-transparent border-l border-amber-400/25 pointer-events-none" />
-        <div className="absolute inset-y-0 right-7 w-1.5 bg-black/35 pointer-events-none" />
-        <div className="absolute inset-y-2.5 left-0 w-3 bg-[repeating-linear-gradient(to_right,#E6DAC5_0px,#F9F5EC_1px,#CFC0A8_2px)] rounded-l-2xl opacity-95 pointer-events-none" />
+      <div className="group relative h-full min-h-[560px] rounded-l-lg rounded-r-sm bg-[#1F1814] text-[#F5F1E8] p-6 sm:p-10 border border-[#C4A46B]/40 shadow-[-14px_18px_38px_rgba(24,18,14,0.34)] overflow-hidden flex flex-col justify-between cursor-pointer">
+        <div className="absolute inset-y-0 right-0 w-6 bg-black/35 border-l border-[#C4A46B]/20 pointer-events-none" />
+        <div className="absolute inset-y-3 left-0 w-2.5 bg-[repeating-linear-gradient(to_right,#E6DEC8_0px,#FAF8F3_1px,#D4C8B2_2px)] rounded-l-sm opacity-95 pointer-events-none" />
 
-        <div className="relative mr-4 flex-1 border-2 border-amber-400/45 rounded-2xl p-6 sm:p-8 text-center flex flex-col justify-between bg-[radial-gradient(circle_at_bottom,rgba(212,160,56,0.14),transparent_65%)]">
+        <div className="relative mr-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-6 sm:p-8 text-center flex flex-col justify-between">
           <div className="space-y-2">
-            <span className="inline-block px-3 py-1 rounded-full border border-amber-400/40 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300">
-              Sampul Penutup Katalog Sanggar
+            <span className="inline-block text-[13px] font-medium text-[#C4A46B]">
+              Sampul Penutup Katalog
             </span>
-            <h3 className="font-serif text-2xl sm:text-3xl font-bold text-amber-200 pt-2">
+            <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#F5F1E8] pt-1">
               {shop.name}
             </h3>
-            <p className="text-xs text-amber-100/75">{shop.address}</p>
+            <p className="text-[14px] text-[#B5ACA2]">{shop.address}</p>
           </div>
 
           <div className="my-4 space-y-4">
             {lastProduct && (
-              <div className="mx-auto w-24 h-24 rounded-full p-1.5 border border-amber-400/50 bg-[#1F100A]">
+              <div className="mx-auto w-28 aspect-[4/3] rounded-sm overflow-hidden border border-[#C4A46B]/35 bg-[#1B1714]">
                 <ProductArtwork
                   product={lastProduct}
                   imageUrl={lastProduct.primaryImageUrl}
-                  size={140}
-                  className="w-full h-full rounded-full"
+                  size={180}
+                  className="w-full h-full"
                 />
               </div>
             )}
 
-            <p className="text-xs sm:text-sm font-serif text-amber-100/85 leading-relaxed">
+            <p className="text-[14px] font-serif text-[#F5F1E8]/85 leading-relaxed max-w-md mx-auto">
               {shop.description}
             </p>
 
-            <div className="flex flex-wrap justify-center gap-2">
+            <div className="flex flex-wrap justify-center gap-2.5">
               <a
                 href={buildWhatsAppUrl(
                   shopWa,
@@ -359,10 +368,10 @@ export default function PhysicalCatalogBookSection({
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-colors"
+                className="taste-btn-primary"
               >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>Pesan via WhatsApp (+{shopWa})</span>
+                <MessageCircle className="w-4 h-4 shrink-0" />
+                <span className="tabular-nums">Pesan via WhatsApp (+{shopWa})</span>
               </a>
 
               {shop.online_shop && (
@@ -370,9 +379,9 @@ export default function PhysicalCatalogBookSection({
                   href={shop.online_shop}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[14px] font-medium transition-colors"
                 >
-                  <Store className="w-3.5 h-3.5" />
+                  <Store className="w-4 h-4 text-[#C4A46B]" />
                   <span>Toko Online</span>
                 </a>
               )}
@@ -382,30 +391,30 @@ export default function PhysicalCatalogBookSection({
                   href={shop.instagram}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-amber-400/30 text-amber-100 text-xs font-bold"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[14px] font-medium transition-colors"
                 >
-                  <InstagramIcon className="w-3.5 h-3.5" />
+                  <InstagramIcon className="w-4 h-4 text-[#C4A46B]" />
                   <span>Instagram</span>
                 </a>
               )}
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-2 pt-2">
+          <div className="flex flex-wrap justify-center gap-2.5 pt-2">
             <button
               type="button"
               disabled={!interactive}
               onClick={() => interactive && triggerFlip(backCoverPage - 1)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/15 hover:bg-white/25 border border-amber-400/45 text-amber-200 text-xs font-bold cursor-pointer"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[13px] font-medium cursor-pointer"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-4 h-4" />
               <span>Halaman Terakhir</span>
             </button>
             <button
               type="button"
               disabled={!interactive}
               onClick={() => interactive && triggerFlip(0)}
-              className="px-4 py-2 rounded-full bg-amber-400 hover:bg-amber-300 text-[#2C241E] text-xs font-bold cursor-pointer"
+              className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-md bg-[#FCFBF8] hover:bg-[#EFEAE0] text-[#1C1917] text-[13px] font-medium cursor-pointer"
             >
               Tutup ke Sampul Depan
             </button>
@@ -416,9 +425,9 @@ export default function PhysicalCatalogBookSection({
           <div
             style={{
               background:
-                'linear-gradient(45deg, #D9C4A3 0%, #EFE2CC 44%, #FFFDF8 50%, rgba(0,0,0,0.35) 53%, transparent 58%)',
+                'linear-gradient(45deg, #D9CBB4 0%, #EFE6D5 44%, #FAF8F3 50%, rgba(0,0,0,0.3) 53%, transparent 58%)',
             }}
-            className="w-11 h-11 absolute bottom-0 left-0 rounded-tr-xl opacity-85 group-hover:w-14 group-hover:h-14 transition-all pointer-events-none"
+            className="w-11 h-11 absolute bottom-0 left-0 opacity-85 group-hover:w-14 group-hover:h-14 transition-all pointer-events-none"
           />
         )}
       </div>
@@ -431,19 +440,16 @@ export default function PhysicalCatalogBookSection({
     const currentImage = gallery[selectedIdx];
 
     return (
-      <div className="space-y-2">
-        <div className={`relative ${aspectClass} rounded-xl overflow-hidden border border-[#DFD2BC] bg-white`}>
+      <div className="space-y-2.5">
+        <div
+          className={`relative ${aspectClass} rounded-md overflow-hidden border border-[#1C1917]/12 bg-[#EFEAE0]`}
+        >
           <ProductArtwork
             product={prod}
             imageUrl={currentImage?.image_url || prod.primaryImageUrl}
             size={480}
             className="w-full h-full"
           />
-          {prod.mockupImage && (
-            <span className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-full bg-[#2C241E]/85 text-amber-300 text-[10px] font-bold backdrop-blur-xs">
-              3D Mockup Siap
-            </span>
-          )}
         </div>
 
         {gallery.length > 1 && (
@@ -457,10 +463,11 @@ export default function PhysicalCatalogBookSection({
                   interactive &&
                   setActiveGalleryMap((prev) => ({ ...prev, [prod.id]: idx }))
                 }
-                className={`w-12 h-10 rounded-lg overflow-hidden border transition-all cursor-pointer ${
+                aria-label={`Lihat foto ${idx + 1} untuk ${prod.name}`}
+                className={`w-12 h-10 rounded-sm overflow-hidden border transition-opacity cursor-pointer ${
                   idx === selectedIdx
-                    ? 'border-[#8B3A1E] ring-2 ring-[#8B3A1E]/30'
-                    : 'border-[#DFD2BC] opacity-75 hover:opacity-100'
+                    ? 'border-[#7C3219] ring-1 ring-[#7C3219]'
+                    : 'border-[#1C1917]/15 opacity-70 hover:opacity-100'
                 }`}
               >
                 <ProductArtwork
@@ -471,7 +478,7 @@ export default function PhysicalCatalogBookSection({
                 />
               </button>
             ))}
-            <span className="text-[10px] text-[#6B5B4E] ml-auto">
+            <span className="text-[13px] text-[#575049] ml-auto tabular-nums">
               Foto {selectedIdx + 1}/{gallery.length}
             </span>
           </div>
@@ -492,45 +499,45 @@ export default function PhysicalCatalogBookSection({
 
     return (
       <div
-        className={`rounded-2xl bg-white/95 border p-4 sm:p-5 space-y-3 transition-all ${
-          isHighlighted ? 'border-[#8B3A1E] ring-2 ring-[#8B3A1E]/25' : 'border-[#DFD2BC]'
+        className={`space-y-4 ${
+          isHighlighted ? 'pt-3 border-t-2 border-[#7C3219]' : ''
         }`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="px-2.5 py-0.5 rounded-full bg-[#8B3A1E]/10 text-[#8B3A1E] text-[10px] font-bold">
-            Produk #{idxInShop + 1} dari {products.length} • {prod.category.name}
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[13px] font-medium text-[#7C3219]">
+            Koleksi #{idxInShop + 1} dari {products.length} · {prod.category.name}
           </span>
-          <span className="text-sm font-bold text-[#8B3A1E]">{formatRupiah(prod.price)}</span>
+          <span className="text-[15px] font-semibold text-[#1C1917] tabular-nums">
+            {formatRupiah(prod.price)}
+          </span>
         </div>
 
-        {renderProductMediaGallery(prod, 'aspect-[16/9]', interactive)}
+        {renderProductMediaGallery(prod, 'aspect-[16/10]', interactive)}
 
-        <div className="space-y-1">
-          <h4 className="font-serif text-xl font-bold text-[#2C241E]">{prod.name}</h4>
-          <p className="text-xs font-serif italic text-[#4F4136] line-clamp-2 leading-relaxed">
+        <div className="space-y-1.5">
+          <h4 className="font-serif text-[22px] font-normal text-[#1C1917] leading-snug">
+            {prod.name}
+          </h4>
+          <p className="text-[14px] font-serif italic text-[#575049] line-clamp-2 leading-relaxed">
             “{prod.description}”
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 py-2.5 border-y border-[#1C1917]/12 text-[13px]">
           {prod.formattedAttributes.slice(0, 4).map((attr) => (
-            <div key={attr.name} className="py-1.5 px-2.5 rounded-xl bg-[#FAF6EE] border border-[#E8DEC8]">
-              <span className="block text-[9px] font-bold uppercase text-[#6B5B4E]">
-                {attr.label}
-              </span>
-              <span className="block text-[11px] font-bold text-[#2C241E] truncate">
-                {attr.displayValue}
-              </span>
+            <div key={attr.name} className="min-w-0">
+              <dt className="text-[#575049] truncate">{attr.label}</dt>
+              <dd className="font-medium text-[#1C1917] truncate">{attr.displayValue}</dd>
             </div>
           ))}
-        </div>
+        </dl>
 
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        <div className="grid grid-cols-2 gap-2.5 pt-1">
           <button
             type="button"
             disabled={!interactive}
             onClick={() => interactive && onTryIn3D(prod.id)}
-            className="py-2.5 px-3 rounded-xl bg-[#FAF6EE] hover:bg-amber-50 border border-[#DFD2BC] text-xs font-bold text-[#2C241E] cursor-pointer"
+            className="taste-btn-secondary w-full"
           >
             Simulasi 3D
           </button>
@@ -538,9 +545,9 @@ export default function PhysicalCatalogBookSection({
             href={productWaHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5"
+            className="taste-btn-primary w-full"
           >
-            <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+            <MessageCircle className="w-4 h-4 shrink-0" />
             <span>Pesan via WA</span>
           </a>
         </div>
@@ -555,22 +562,21 @@ export default function PhysicalCatalogBookSection({
     if (pageIdx === 1) {
       if (side === 'left') {
         return (
-          <div className="h-full p-6 sm:p-8 lg:pr-11 flex flex-col justify-between space-y-3.5 paper-surface">
-            <div className="space-y-3.5">
-              <div className="flex items-center justify-between text-[11px] font-serif italic text-[#8B3A1E] border-b border-[#E2D6C3] pb-2">
+          <div className="h-full p-6 sm:p-8 lg:pr-11 flex flex-col justify-between space-y-4 paper-surface">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-[13px] font-serif italic text-[#7C3219] border-b border-[#1C1917]/12 pb-2">
                 <span>Profil Sanggar &amp; Pengelola</span>
-                <span>Halaman 1</span>
+                <span className="tabular-nums">Halaman 1</span>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#8B3A1E]/10 text-[#8B3A1E] text-[10px] font-bold">
-                    <Award className="w-3 h-3" />
-                    <span>Sentra Batik Trenggalek</span>
+                  <span className="text-[13px] font-medium text-[#7C3219]">
+                    Sentra Batik Trenggalek
                   </span>
 
                   {account && (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#5C4D40]">
+                    <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#575049]">
                       {account.profile ? (
                         <img
                           src={account.profile}
@@ -578,22 +584,22 @@ export default function PhysicalCatalogBookSection({
                           className="w-4 h-4 rounded-full object-cover"
                         />
                       ) : (
-                        <User className="w-3.5 h-3.5 text-[#8B3A1E]" />
+                        <User className="w-3.5 h-3.5 text-[#7C3219]" />
                       )}
                       <span>{account.display_name}</span>
                     </span>
                   )}
                 </div>
 
-                <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#2C241E] leading-tight">
+                <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#1C1917] leading-tight">
                   {shop.name}
                 </h3>
 
-                <p className="text-xs text-[#4F4136] leading-relaxed">{shop.description}</p>
+                <p className="text-[14px] text-[#575049] leading-relaxed">{shop.description}</p>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-[#5C4D40]">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[13px] text-[#575049]">
                   <span className="flex items-start gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-[#8B3A1E] shrink-0 mt-0.5" />
+                    <MapPin className="w-4 h-4 text-[#7C3219] shrink-0 mt-0.5" />
                     <span>{shop.address}</span>
                   </span>
                   {shop.gmaps && (
@@ -601,20 +607,20 @@ export default function PhysicalCatalogBookSection({
                       href={shop.gmaps}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-[#DFD2BC] text-[10.5px] font-bold text-[#8B3A1E] hover:bg-amber-50 shrink-0"
+                      className="taste-link text-[13px] font-medium text-[#7C3219] shrink-0"
                     >
                       <span>Google Maps</span>
-                      <ExternalLink className="w-3 h-3" />
+                      <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-[#F4ECE0] border border-[#DFD2BC] space-y-2.5">
+              <div className="py-3 border-y border-[#1C1917]/12 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-[#8B3A1E] block">
-                      WhatsApp Pemesanan Resmi
+                    <span className="text-[13px] font-medium text-[#7C3219] block">
+                      WhatsApp pemesanan resmi
                     </span>
                     {interactive && editingWa ? (
                       <div className="flex items-center gap-1.5 mt-1">
@@ -622,7 +628,8 @@ export default function PhysicalCatalogBookSection({
                           type="text"
                           value={waInput}
                           onChange={(e) => setWaInput(e.target.value)}
-                          className="px-2.5 py-1 rounded-lg bg-white border border-[#CBBBA4] text-xs font-bold text-[#2C241E]"
+                          aria-label="Nomor WhatsApp Sanggar"
+                          className="min-h-[38px] px-2.5 py-1 rounded-md bg-[#FCFBF8] border border-[#1C1917]/25 text-[13px] font-mono text-[#1C1917]"
                         />
                         <button
                           type="button"
@@ -630,19 +637,20 @@ export default function PhysicalCatalogBookSection({
                             if (waInput.trim()) onUpdateShopWa(shop.id, waInput.trim());
                             setEditingWa(false);
                           }}
-                          className="p-1.5 rounded-lg bg-emerald-600 text-white cursor-pointer"
+                          aria-label="Simpan nomor WhatsApp"
+                          className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-md bg-[#7C3219] text-white cursor-pointer"
                         >
-                          <Check className="w-3.5 h-3.5" />
+                          <Check className="w-4 h-4" />
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs font-mono font-bold text-[#2C241E] flex items-center gap-1.5 mt-0.5">
-                        <Phone className="w-3.5 h-3.5 text-emerald-700" />+{shopWa}
+                      <span className="text-[14px] font-mono font-medium text-[#1C1917] flex items-center gap-1.5 mt-0.5 tabular-nums">
+                        <Phone className="w-3.5 h-3.5 text-[#7C3219]" />+{shopWa}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     {interactive && !editingWa && (
                       <button
                         type="button"
@@ -650,10 +658,10 @@ export default function PhysicalCatalogBookSection({
                           setWaInput(shopWa);
                           setEditingWa(true);
                         }}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#DFD2BC] text-[10.5px] font-bold text-[#5C4D40] hover:text-[#2C241E] cursor-pointer"
+                        className="inline-flex items-center gap-1 min-h-[38px] px-3 py-1.5 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[13px] font-medium text-[#575049] hover:text-[#1C1917] cursor-pointer"
                       >
-                        <Edit3 className="w-3 h-3 inline mr-1" />
-                        Ubah WA
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Ubah WA</span>
                       </button>
                     )}
                     <a
@@ -663,7 +671,7 @@ export default function PhysicalCatalogBookSection({
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold"
+                      className="inline-flex items-center justify-center min-h-[38px] px-3.5 py-1.5 rounded-md bg-[#7C3219] hover:bg-[#632612] text-white text-[13px] font-medium transition-colors"
                     >
                       Chat WA
                     </a>
@@ -671,17 +679,16 @@ export default function PhysicalCatalogBookSection({
                 </div>
 
                 {(shop.online_shop || shop.instagram) && (
-                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[#DFD2BC]">
+                  <div className="flex flex-wrap gap-3 pt-2">
                     {shop.online_shop && (
                       <a
                         href={shop.online_shop}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white hover:bg-amber-50 border border-[#DFD2BC] text-[10.5px] font-bold text-[#2C241E]"
+                        className="taste-link text-[13px] font-medium text-[#1C1917]"
                       >
-                        <Store className="w-3 h-3 text-[#8B3A1E]" />
+                        <Store className="w-3.5 h-3.5 text-[#7C3219]" />
                         <span>Toko Online</span>
-                        <ExternalLink className="w-2.5 h-2.5 text-[#6B5B4E]" />
                       </a>
                     )}
                     {shop.instagram && (
@@ -689,44 +696,43 @@ export default function PhysicalCatalogBookSection({
                         href={shop.instagram}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white hover:bg-amber-50 border border-[#DFD2BC] text-[10.5px] font-bold text-[#2C241E]"
+                        className="taste-link text-[13px] font-medium text-[#1C1917]"
                       >
-                        <InstagramIcon className="w-3 h-3 text-[#8B3A1E]" />
+                        <InstagramIcon className="w-3.5 h-3.5 text-[#7C3219]" />
                         <span>Instagram Sanggar</span>
-                        <ExternalLink className="w-2.5 h-2.5 text-[#6B5B4E]" />
                       </a>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8B3A1E] block">
-                  Daftar Koleksi Produk ({products.length} Karya Aktif)
+              <div className="space-y-2">
+                <span className="text-[13px] font-medium text-[#7C3219] block">
+                  Daftar isi koleksi ({products.length} karya aktif)
                 </span>
-                <div className="divide-y divide-[#E6DDD0] rounded-2xl border border-[#DFD2BC] bg-white/85 overflow-hidden">
+                <div className="divide-y divide-[#1C1917]/10 border-t border-b border-[#1C1917]/12">
                   {products.map((p, idx) => (
                     <button
                       key={p.id}
                       type="button"
                       disabled={!interactive || idx === 0}
                       onClick={() => interactive && idx > 0 && triggerFlip(idx + 1)}
-                      className={`w-full px-3.5 py-2 text-left flex items-center justify-between gap-2 transition-colors ${
+                      className={`w-full py-2.5 text-left flex items-center justify-between gap-3 transition-colors ${
                         idx === 0
-                          ? 'bg-amber-50/80 text-[#8B3A1E]'
-                          : 'hover:bg-[#F4ECE0]/70 text-[#2C241E] cursor-pointer'
+                          ? 'text-[#7C3219]'
+                          : 'hover:bg-[#EFEAE0]/60 text-[#1C1917] cursor-pointer'
                       }`}
                     >
                       <div className="min-w-0">
-                        <span className="font-serif font-bold text-xs block truncate">
+                        <span className="font-serif font-medium text-[14px] block truncate">
                           0{idx + 1}. {p.name}
                         </span>
-                        <span className="text-[10px] text-[#6B5B4E]">
-                          {p.category.name} • {formatRupiah(p.price)}
+                        <span className="text-[13px] text-[#575049] tabular-nums">
+                          {p.category.name} · {formatRupiah(p.price)}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[11px] font-bold text-[#8B3A1E]">
-                        {idx === 0 ? 'Hal. 2 (Tampil)' : `Hal. ${idx * 2 + 1} →`}
+                      <span className="shrink-0 text-[13px] font-medium text-[#7C3219] tabular-nums">
+                        {idx === 0 ? 'Hal. 2' : `Hal. ${idx * 2 + 1} →`}
                       </span>
                     </button>
                   ))}
@@ -734,7 +740,7 @@ export default function PhysicalCatalogBookSection({
               </div>
             </div>
 
-            <div className="text-[11px] font-serif italic text-[#6B5B4E] flex items-center justify-between pt-2 border-t border-[#E2D6C3]">
+            <div className="text-[13px] font-serif italic text-[#575049] flex items-center justify-between pt-2.5 border-t border-[#1C1917]/12 tabular-nums">
               <span>{shop.name}</span>
               <span>Halaman 1 dari {Math.max(2, products.length * 2)}</span>
             </div>
@@ -743,22 +749,22 @@ export default function PhysicalCatalogBookSection({
       }
 
       return (
-        <div className="h-full p-6 sm:p-8 lg:pl-11 flex flex-col justify-between space-y-3.5 paper-surface">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-[11px] font-serif italic text-[#8B3A1E] border-b border-[#E2D6C3] pb-2">
+        <div className="h-full p-6 sm:p-8 lg:pl-11 flex flex-col justify-between space-y-4 paper-surface">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-[13px] font-serif italic text-[#7C3219] border-b border-[#1C1917]/12 pb-2">
               <span>Lembar Koleksi Utama Sanggar</span>
-              <span>Halaman 2</span>
+              <span className="tabular-nums">Halaman 2</span>
             </div>
             {currentProd ? (
               renderCompactProductCard(currentProd, 0, interactive)
             ) : (
-              <div className="p-8 text-center text-xs text-[#6B5B4E]">
+              <div className="p-8 text-center text-[14px] text-[#575049]">
                 Belum ada produk aktif pada sanggar ini.
               </div>
             )}
           </div>
 
-          <div className="text-[11px] font-serif italic text-[#6B5B4E] flex items-center justify-between pt-2 border-t border-[#E2D6C3]">
+          <div className="text-[13px] font-serif italic text-[#575049] flex items-center justify-between pt-2.5 border-t border-[#1C1917]/12 tabular-nums">
             <span>Seret atau klik sudut kanan untuk membalik</span>
             <span>Halaman 2 dari {Math.max(2, products.length * 2)}</span>
           </div>
@@ -772,34 +778,30 @@ export default function PhysicalCatalogBookSection({
 
     if (side === 'left') {
       return (
-        <div className="h-full p-6 sm:p-8 lg:pr-11 flex flex-col justify-between space-y-3.5 paper-surface">
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between text-[11px] font-serif italic text-[#8B3A1E] border-b border-[#E2D6C3] pb-2">
+        <div className="h-full p-6 sm:p-8 lg:pr-11 flex flex-col justify-between space-y-4 paper-surface">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-[13px] font-serif italic text-[#7C3219] border-b border-[#1C1917]/12 pb-2">
               <span>
-                {shop.name} • Koleksi #0{productIndexForPage + 1}
+                {shop.name} · Koleksi #0{productIndexForPage + 1}
               </span>
-              <span>Halaman {leftPageNum}</span>
+              <span className="tabular-nums">Halaman {leftPageNum}</span>
             </div>
 
-            <div
-              className={`rounded-2xl border bg-white p-2.5 shadow-xs ${
-                isHighlighted ? 'border-[#8B3A1E] ring-2 ring-[#8B3A1E]/25' : 'border-[#DFD2BC]'
-              }`}
-            >
+            <div className={isHighlighted ? 'ring-2 ring-[#7C3219] rounded-md' : ''}>
               {renderProductMediaGallery(currentProd, 'aspect-[4/3]', interactive)}
             </div>
 
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8B3A1E]">
-                Deskripsi &amp; Filosofi Wastra
+              <span className="text-[13px] font-medium text-[#7C3219] block">
+                Deskripsi &amp; filosofi motif
               </span>
-              <p className="text-xs sm:text-sm font-serif italic text-[#4F4136] leading-relaxed">
+              <p className="text-[14px] sm:text-[15px] font-serif italic text-[#1C1917]/85 leading-relaxed">
                 “{currentProd.description}”
               </p>
             </div>
           </div>
 
-          <div className="text-[11px] font-serif italic text-[#6B5B4E] flex items-center justify-between pt-2 border-t border-[#E2D6C3]">
+          <div className="text-[13px] font-serif italic text-[#575049] flex items-center justify-between pt-2.5 border-t border-[#1C1917]/12 tabular-nums">
             <span>Galeri Produk ({currentProd.displayImages.length} Foto)</span>
             <span>
               Halaman {leftPageNum} dari {products.length * 2}
@@ -817,54 +819,54 @@ export default function PhysicalCatalogBookSection({
     );
 
     return (
-      <div className="h-full p-6 sm:p-8 lg:pl-11 flex flex-col justify-between space-y-3.5 paper-surface">
-        <div className="space-y-3.5">
-          <div className="flex items-center justify-between text-[11px] font-serif italic text-[#8B3A1E] border-b border-[#E2D6C3] pb-2">
-            <span>Spesifikasi Kategori &amp; Pemesanan WhatsApp</span>
-            <span>Halaman {rightPageNum}</span>
+      <div className="h-full p-6 sm:p-8 lg:pl-11 flex flex-col justify-between space-y-4 paper-surface">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-[13px] font-serif italic text-[#7C3219] border-b border-[#1C1917]/12 pb-2">
+            <span>Spesifikasi &amp; Pemesanan</span>
+            <span className="tabular-nums">Halaman {rightPageNum}</span>
           </div>
 
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#8B3A1E]/10 text-[#8B3A1E] text-[10px] font-bold">
-                {currentProd.category.name} ({currentProd.category.slug})
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-[13px] font-medium text-[#7C3219]">
+                {currentProd.category.name}
               </span>
-              <span className="text-lg font-bold text-[#8B3A1E]">
+              <span className="text-lg font-semibold text-[#1C1917] tabular-nums">
                 {formatRupiah(currentProd.price)}
               </span>
             </div>
-            <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#2C241E]">
+            <h3 className="font-serif font-normal text-2xl sm:text-3xl text-[#1C1917] leading-tight">
               {currentProd.name}
             </h3>
-            <p className="text-xs text-[#6B5B4E]">Karya {shop.name}</p>
+            <p className="text-[13px] text-[#575049]">Karya {shop.name}</p>
           </div>
 
           <div className="space-y-2 pt-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#8B3A1E] block">
-              Spesifikasi Produk (Tervalidasi Skema Kategori)
+            <span className="text-[13px] font-medium text-[#7C3219] block">
+              Spesifikasi produk
             </span>
-            <div className="rounded-2xl border border-[#DFD2BC] bg-white divide-y divide-[#EFE7DA] overflow-hidden">
+            <dl className="border-t border-b border-[#1C1917]/12 divide-y divide-[#1C1917]/10">
               {currentProd.formattedAttributes.map((attr) => (
                 <div
                   key={attr.name}
-                  className="px-3.5 py-2 flex items-center justify-between gap-3 text-xs"
+                  className="py-2.5 flex items-center justify-between gap-3 text-[13px]"
                 >
-                  <span className="text-[#6B5B4E] font-medium">
+                  <dt className="text-[#575049]">
                     {attr.label}
-                    {attr.required && <span className="text-[#8B3A1E] ml-0.5">*</span>}
-                  </span>
-                  <span className="font-bold text-[#2C241E] text-right">{attr.displayValue}</span>
+                    {attr.required && <span className="text-[#7C3219] ml-0.5">*</span>}
+                  </dt>
+                  <dd className="font-medium text-[#1C1917] text-right">{attr.displayValue}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </div>
 
-          <div className="space-y-2 pt-1">
+          <div className="space-y-2.5 pt-1">
             <a
               href={detailWaHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs flex items-center justify-center gap-2 transition-colors"
+              className="taste-btn-primary w-full"
             >
               <MessageCircle className="w-4 h-4 shrink-0" />
               <span>Pesan Produk Ini via WhatsApp</span>
@@ -875,7 +877,7 @@ export default function PhysicalCatalogBookSection({
                 type="button"
                 disabled={!interactive}
                 onClick={() => interactive && onTryIn3D(currentProd.id)}
-                className="py-2.5 px-3 rounded-xl bg-white hover:bg-amber-50 border border-[#DFD2BC] text-xs font-bold text-[#2C241E] cursor-pointer"
+                className="taste-btn-secondary w-full"
               >
                 Coba di Studio 3D
               </button>
@@ -885,18 +887,18 @@ export default function PhysicalCatalogBookSection({
                   href={currentProd.product_link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="py-2.5 px-3 rounded-xl bg-[#2C241E] hover:bg-[#3F342B] text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5"
+                  className="taste-btn-dark w-full"
                 >
-                  <Store className="w-3.5 h-3.5 shrink-0" />
+                  <Store className="w-4 h-4 text-[#C4A46B] shrink-0" />
                   <span>Marketplace</span>
-                  <ExternalLink className="w-3 h-3 shrink-0" />
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
               )}
             </div>
           </div>
         </div>
 
-        <div className="text-[11px] font-serif italic text-[#6B5B4E] flex items-center justify-between pt-2 border-t border-[#E2D6C3]">
+        <div className="text-[13px] font-serif italic text-[#575049] flex items-center justify-between pt-2.5 border-t border-[#1C1917]/12 tabular-nums">
           <span>
             {pageIdx === backCoverPage - 1
               ? 'Balik ke kanan untuk menutup Sampul Belakang'
@@ -971,15 +973,11 @@ export default function PhysicalCatalogBookSection({
   return (
     <section
       id="buku-katalog"
-      className="py-14 sm:py-20 px-4 sm:px-6 bg-gradient-to-b from-[#EFE7DA] via-[#E6DAC7] to-[#DDD0BC] border-t border-[#D8CBB8] overflow-hidden"
+      className="py-16 lg:py-24 bg-[#EFEAE0] border-t border-[#1C1917]/12 overflow-hidden"
     >
       <style>{`
         .paper-surface {
-          background-color: #FCF9F2;
-          background-image:
-            radial-gradient(rgba(139, 58, 30, 0.032) 1px, transparent 0),
-            linear-gradient(to bottom, rgba(255,255,255,0.75), rgba(243,234,218,0.45));
-          background-size: 18px 18px, 100% 100%;
+          background-color: #FAF8F3;
         }
         .book-3d-stage {
           perspective: 2400px;
@@ -997,29 +995,30 @@ export default function PhysicalCatalogBookSection({
         }
       `}</style>
 
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5">
+      <div className="taste-wrap">
+        <FadeIn>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div>
-            <span className="text-xs font-bold uppercase tracking-widest text-[#8B3A1E] block mb-1.5">
-              Buku Katalog Per Toko • Pemesanan Langsung WhatsApp
+            <span className="text-[13px] font-medium text-[#7C3219] block mb-2">
+              Buku katalog per sanggar · Pemesanan langsung WhatsApp
             </span>
-            <h2 className="font-serif text-2xl sm:text-4xl font-bold text-[#2C241E]">
-              Buku Katalog: {shop.name}
+            <h2 className="font-serif font-normal text-[clamp(1.85rem,3vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
+              Buku Katalog — {shop.name}
             </h2>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
               disabled={safePage === 0 || Boolean(flipState)}
               onClick={() => triggerFlip(safePage - 1)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/90 hover:bg-white disabled:opacity-40 border border-[#CBBBA4] text-xs font-bold text-[#2C241E] shadow-xs cursor-pointer disabled:cursor-not-allowed"
+              className="taste-btn-secondary whitespace-nowrap shrink-0"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4 shrink-0" />
               <span>Sebelumnya</span>
             </button>
 
-            <span className="px-3.5 py-2 rounded-xl bg-[#2C241E] text-amber-300 text-xs font-bold shadow-xs">
+            <span className="min-h-[44px] px-3.5 inline-flex items-center justify-center rounded-md bg-[#FCFBF8] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] tabular-nums whitespace-nowrap shrink-0">
               {safePage === 0
                 ? 'Sampul Depan'
                 : safePage === backCoverPage
@@ -1031,20 +1030,20 @@ export default function PhysicalCatalogBookSection({
               type="button"
               disabled={safePage === backCoverPage || Boolean(flipState)}
               onClick={() => triggerFlip(safePage + 1)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/90 hover:bg-white disabled:opacity-40 border border-[#CBBBA4] text-xs font-bold text-[#2C241E] shadow-xs cursor-pointer disabled:cursor-not-allowed"
+              className="taste-btn-secondary whitespace-nowrap shrink-0"
             >
-              <span>Balik Halaman</span>
-              <ChevronRight className="w-4 h-4" />
+              <span>Berikutnya</span>
+              <ChevronRight className="w-4 h-4 shrink-0" />
             </button>
           </div>
         </div>
 
-        {/* Rak Pemilihan Buku Per UMKM */}
-        <div className="p-3 rounded-2xl bg-white/75 backdrop-blur-xs border border-[#CBBBA4] mb-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B3A1E] block mb-2 px-1">
-            Pilih Buku Katalog Sentra UMKM ({shopBooks.length} Toko Aktif):
+        {/* Pilihan Buku Per Sanggar UMKM */}
+        <div className="mb-5">
+          <span className="text-[13px] font-medium text-[#575049] block mb-2.5">
+            Pilih sanggar UMKM ({shopBooks.length} sanggar aktif)
           </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
             {shopBooks.map((bk, idx) => {
               const isSelectedBook = bk.shop.id === shop.id;
               return (
@@ -1052,35 +1051,27 @@ export default function PhysicalCatalogBookSection({
                   key={bk.shop.id}
                   type="button"
                   onClick={() => handleSwitchShopBook(bk.shop.id)}
-                  className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2.5 cursor-pointer ${
+                  className={`min-h-[54px] px-3.5 py-2.5 rounded-md border text-left transition-colors flex items-center gap-3 cursor-pointer ${
                     isSelectedBook
-                      ? 'bg-[#3A1D12] text-amber-100 border-[#3A1D12] shadow-sm'
-                      : 'bg-[#FAF7F2] hover:bg-white text-[#2C241E] border-[#D8CBB8]'
+                      ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
+                      : 'bg-[#FCFBF8] hover:bg-white text-[#1C1917] border-[#1C1917]/15'
                   }`}
                 >
-                  <div
-                    className={`w-8 h-10 rounded-r-md rounded-l-xs border flex items-center justify-center shrink-0 font-serif font-bold text-xs ${
-                      isSelectedBook
-                        ? 'bg-amber-400 text-[#2C241E] border-amber-300'
-                        : 'bg-[#8B3A1E] text-white border-[#6E2C15]'
+                  <span
+                    className={`font-mono text-[13px] tabular-nums shrink-0 ${
+                      isSelectedBook ? 'text-[#C4A46B]' : 'text-[#7C3219]'
                     }`}
                   >
                     0{idx + 1}
-                  </div>
+                  </span>
                   <div className="min-w-0">
+                    <span className="block text-[14px] font-medium truncate">{bk.shop.name}</span>
                     <span
-                      className={`block text-[11px] font-bold truncate ${
-                        isSelectedBook ? 'text-amber-300' : 'text-[#2C241E]'
+                      className={`block text-[13px] truncate ${
+                        isSelectedBook ? 'text-[#B5ACA2]' : 'text-[#575049]'
                       }`}
                     >
-                      {bk.shop.name}
-                    </span>
-                    <span
-                      className={`block text-[10px] truncate ${
-                        isSelectedBook ? 'text-amber-100/75' : 'text-[#6B5B4E]'
-                      }`}
-                    >
-                      {bk.products.length} Koleksi Produk
+                      {bk.products.length} koleksi
                     </span>
                   </div>
                 </button>
@@ -1089,20 +1080,19 @@ export default function PhysicalCatalogBookSection({
           </div>
         </div>
 
-        {/* Pita Pembatas Halaman */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-5">
+        {/* Daftar Halaman Buku */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-6 pb-3 border-b border-[#1C1917]/12">
           <button
             type="button"
             disabled={Boolean(flipState)}
             onClick={() => triggerFlip(0)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-t-xl rounded-b-md text-[11px] font-bold border transition-all cursor-pointer ${
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
               safePage === 0
-                ? 'bg-[#3D1E12] text-amber-300 border-[#3D1E12] shadow-sm -translate-y-0.5'
-                : 'bg-white/80 text-[#5C4D40] border-[#CBBBA4] hover:bg-white'
+                ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
             }`}
           >
-            <Bookmark className="w-3 h-3" />
-            <span>Sampul Depan</span>
+            Sampul Depan
           </button>
 
           {products.map((p, idx) => {
@@ -1114,10 +1104,10 @@ export default function PhysicalCatalogBookSection({
                 type="button"
                 disabled={Boolean(flipState)}
                 onClick={() => triggerFlip(pageNum)}
-                className={`px-3 py-1.5 rounded-t-xl rounded-b-md text-[11px] font-bold border transition-all cursor-pointer ${
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-[#8B3A1E] text-white border-[#8B3A1E] shadow-sm -translate-y-0.5'
-                    : 'bg-white/80 text-[#2C241E] border-[#CBBBA4] hover:bg-white'
+                    ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                    : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
                 }`}
               >
                 {idx === 0 ? `Profil & ${p.name}` : `${idx + 1}. ${p.name}`}
@@ -1129,17 +1119,19 @@ export default function PhysicalCatalogBookSection({
             type="button"
             disabled={Boolean(flipState)}
             onClick={() => triggerFlip(backCoverPage)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-t-xl rounded-b-md text-[11px] font-bold border transition-all cursor-pointer ${
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
               safePage === backCoverPage
-                ? 'bg-[#3D1E12] text-amber-300 border-[#3D1E12] shadow-sm -translate-y-0.5'
-                : 'bg-white/80 text-[#5C4D40] border-[#CBBBA4] hover:bg-white'
+                ? 'bg-[#7C3219] text-white border-[#7C3219]'
+                : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
             }`}
           >
-            <span>Sampul Belakang</span>
+            Sampul Belakang
           </button>
         </div>
+        </FadeIn>
 
         {/* Panggung 3D Buku Fisik */}
+        <FadeIn variant="scale" delay={140}>
         <div
           ref={bookContainerRef}
           onPointerDown={handleBookPointerDown}
@@ -1158,14 +1150,14 @@ export default function PhysicalCatalogBookSection({
               <div className="relative grid grid-cols-1 lg:grid-cols-2 min-h-[560px]">
                 <div className="hidden lg:block pointer-events-none" />
 
-                <div className="relative rounded-2xl lg:rounded-l-none lg:rounded-r-2xl overflow-hidden bg-[#FCF9F2] border border-[#5A3422] shadow-[0_24px_50px_rgba(32,19,12,0.35)]">
+                <div className="relative rounded-lg lg:rounded-l-none lg:rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
                   {renderSpreadSide(frontSpreadTarget, 'right', false)}
                   <div
                     className="pointer-events-none absolute inset-0 z-20"
                     style={{
                       opacity: Math.max(0, (1 - frontOpenAmount) * 0.55),
                       background:
-                        'linear-gradient(to right, rgba(24,14,8,0.5) 0%, rgba(24,14,8,0.18) 55%, transparent 100%)',
+                        'linear-gradient(to right, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
                     }}
                   />
                 </div>
@@ -1182,23 +1174,23 @@ export default function PhysicalCatalogBookSection({
                   <div className="book-leaf-face absolute inset-0">
                     {renderFrontCoverFace(false)}
                     <div
-                      className="absolute inset-0 rounded-r-3xl rounded-l-lg pointer-events-none"
+                      className="absolute inset-0 rounded-r-lg rounded-l-sm pointer-events-none"
                       style={{
                         opacity: frontArch * 0.65,
                         background:
-                          'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.32) 48%, rgba(0,0,0,0.18) 100%)',
+                          'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
                       }}
                     />
                   </div>
 
-                  <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-l-2xl overflow-hidden bg-[#FCF9F2] border border-[#5A3422] shadow-[0_18px_40px_rgba(25,15,8,0.32)]">
+                  <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]">
                     {renderSpreadSide(frontSpreadTarget, 'left', false)}
                     <div
                       className="absolute inset-0 pointer-events-none"
                       style={{
                         opacity: frontArch * 0.6,
                         background:
-                          'linear-gradient(270deg, rgba(25,15,10,0.28) 0%, rgba(255,255,255,0.4) 45%, rgba(44,36,30,0.12) 100%)',
+                          'linear-gradient(270deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
                       }}
                     />
                   </div>
@@ -1213,14 +1205,14 @@ export default function PhysicalCatalogBookSection({
               className="relative mx-auto"
             >
               <div className="relative grid grid-cols-1 lg:grid-cols-2 min-h-[560px]">
-                <div className="relative rounded-2xl lg:rounded-r-none lg:rounded-l-2xl overflow-hidden bg-[#FCF9F2] border border-[#5A3422] shadow-[0_24px_50px_rgba(32,19,12,0.35)]">
+                <div className="relative rounded-lg lg:rounded-r-none lg:rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
                   {renderSpreadSide(backSpreadTarget, 'left', false)}
                   <div
                     className="pointer-events-none absolute inset-0 z-20"
                     style={{
                       opacity: Math.max(0, backClosedAmount * 0.55),
                       background:
-                        'linear-gradient(to left, rgba(24,14,8,0.5) 0%, rgba(24,14,8,0.18) 55%, transparent 100%)',
+                        'linear-gradient(to left, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
                     }}
                   />
                 </div>
@@ -1241,23 +1233,23 @@ export default function PhysicalCatalogBookSection({
                   <div className="book-leaf-face absolute inset-0">
                     {renderBackCoverFace(false)}
                     <div
-                      className="absolute inset-0 rounded-l-3xl rounded-r-lg pointer-events-none"
+                      className="absolute inset-0 rounded-l-lg rounded-r-sm pointer-events-none"
                       style={{
                         opacity: backArch * 0.65,
                         background:
-                          'linear-gradient(270deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.32) 48%, rgba(0,0,0,0.18) 100%)',
+                          'linear-gradient(270deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
                       }}
                     />
                   </div>
 
-                  <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-r-2xl overflow-hidden bg-[#FCF9F2] border border-[#5A3422] shadow-[0_18px_40px_rgba(25,15,8,0.32)]">
+                  <div className="book-leaf-face book-leaf-back absolute inset-0 rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]">
                     {renderSpreadSide(backSpreadTarget, 'right', false)}
                     <div
                       className="absolute inset-0 pointer-events-none"
                       style={{
                         opacity: backArch * 0.6,
                         background:
-                          'linear-gradient(90deg, rgba(25,15,10,0.28) 0%, rgba(255,255,255,0.4) 45%, rgba(44,36,30,0.12) 100%)',
+                          'linear-gradient(90deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
                       }}
                     />
                   </div>
@@ -1269,12 +1261,12 @@ export default function PhysicalCatalogBookSection({
           ) : safePage === backCoverPage ? (
             <div className="w-full lg:w-1/2 mx-auto">{renderBackCoverFace(true)}</div>
           ) : (
-            <div className="relative rounded-3xl bg-[#381E13] p-2 sm:p-3.5 shadow-[0_28px_60px_rgba(32,19,12,0.42)] border border-[#5A3422]">
-              <div className="hidden lg:block absolute inset-y-5 left-2 w-3 bg-[repeating-linear-gradient(to_right,#E4D7C0_0px,#FAF6ED_1px,#D2C3AA_2px)] rounded-l-lg z-10 shadow-inner" />
-              <div className="hidden lg:block absolute inset-y-5 right-2 w-3 bg-[repeating-linear-gradient(to_left,#E4D7C0_0px,#FAF6ED_1px,#D2C3AA_2px)] rounded-r-lg z-10 shadow-inner" />
+            <div className="relative rounded-lg bg-[#2B201A] p-2 sm:p-3 shadow-[0_24px_54px_rgba(24,18,14,0.34)] border border-[#1C1917]/25">
+              <div className="hidden lg:block absolute inset-y-4 left-2 w-2.5 bg-[repeating-linear-gradient(to_right,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-l-sm z-10 shadow-inner" />
+              <div className="hidden lg:block absolute inset-y-4 right-2 w-2.5 bg-[repeating-linear-gradient(to_left,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-r-sm z-10 shadow-inner" />
 
-              <div className="relative grid grid-cols-1 lg:grid-cols-2 rounded-2xl overflow-hidden bg-[#FCF9F2] min-h-[560px]">
-                <div className="relative border-b lg:border-b-0 lg:border-r border-[#E2D6C3]">
+              <div className="relative grid grid-cols-1 lg:grid-cols-2 rounded-md overflow-hidden bg-[#FAF8F3] min-h-[560px]">
+                <div className="relative border-b lg:border-b-0 lg:border-r border-[#1C1917]/12">
                   {renderSpreadSide(baseLeftSpread, 'left', !flipState)}
 
                   {isTurningBetweenSpreads && flipState.direction === 'next' && (
@@ -1283,7 +1275,7 @@ export default function PhysicalCatalogBookSection({
                       style={{
                         opacity: Math.max(0, (flipState.progress - 0.35) * 1.1),
                         background:
-                          'linear-gradient(to left, rgba(28,18,12,0.28) 0%, rgba(44,36,30,0.06) 45%, transparent 100%)',
+                          'linear-gradient(to left, rgba(28,18,12,0.25) 0%, rgba(44,36,30,0.06) 45%, transparent 100%)',
                       }}
                     />
                   )}
@@ -1301,17 +1293,17 @@ export default function PhysicalCatalogBookSection({
                             ? Math.max(0, (0.65 - flipState.progress) * 1.1)
                             : Math.max(0, (flipState.progress - 0.35) * 1.1),
                         background:
-                          'linear-gradient(to right, rgba(28,18,12,0.3) 0%, rgba(44,36,30,0.08) 45%, transparent 100%)',
+                          'linear-gradient(to right, rgba(28,18,12,0.28) 0%, rgba(44,36,30,0.08) 45%, transparent 100%)',
                       }}
                     />
                   )}
                 </div>
 
                 <div
-                  className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-16 z-20"
+                  className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-14 z-20"
                   style={{
                     background:
-                      'linear-gradient(to right, rgba(44,36,30,0) 0%, rgba(44,36,30,0.09) 38%, rgba(24,15,10,0.26) 50%, rgba(44,36,30,0.09) 62%, rgba(44,36,30,0) 100%)',
+                      'linear-gradient(to right, rgba(28,25,23,0) 0%, rgba(28,25,23,0.07) 38%, rgba(24,15,10,0.22) 50%, rgba(28,25,23,0.07) 62%, rgba(28,25,23,0) 100%)',
                   }}
                 />
 
@@ -1328,7 +1320,7 @@ export default function PhysicalCatalogBookSection({
                     }}
                     className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                   >
-                    <div className="book-leaf-face absolute inset-0 overflow-hidden bg-[#FCF9F2] shadow-[0_18px_42px_rgba(25,15,8,0.34)] border-l border-[#DFD2BC]">
+                    <div className="book-leaf-face absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-l border-[#1C1917]/15">
                       {renderSpreadSide(
                         flipState.fromPage,
                         flipState.direction === 'next' ? 'right' : 'left',
@@ -1341,20 +1333,20 @@ export default function PhysicalCatalogBookSection({
                           background:
                             flipState.direction === 'next'
                               ? `linear-gradient(90deg,
-                                  rgba(25,15,10,0.28) 0%,
-                                  rgba(255,255,255,0.48) ${Math.max(12, 55 - flipState.progress * 38)}%,
-                                  rgba(44,36,30,0.16) ${Math.max(25, 76 - flipState.progress * 32)}%,
-                                  rgba(255,255,255,0.25) 100%)`
+                                  rgba(25,15,10,0.25) 0%,
+                                  rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
+                                  rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
+                                  rgba(255,255,255,0.22) 100%)`
                               : `linear-gradient(270deg,
-                                  rgba(25,15,10,0.28) 0%,
-                                  rgba(255,255,255,0.48) ${Math.max(12, 55 - flipState.progress * 38)}%,
-                                  rgba(44,36,30,0.16) ${Math.max(25, 76 - flipState.progress * 32)}%,
-                                  rgba(255,255,255,0.25) 100%)`,
+                                  rgba(25,15,10,0.25) 0%,
+                                  rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
+                                  rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
+                                  rgba(255,255,255,0.22) 100%)`,
                         }}
                       />
                     </div>
 
-                    <div className="book-leaf-face book-leaf-back absolute inset-0 overflow-hidden bg-[#FCF9F2] shadow-[0_18px_42px_rgba(25,15,8,0.34)] border-r border-[#DFD2BC]">
+                    <div className="book-leaf-face book-leaf-back absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-r border-[#1C1917]/15">
                       {renderSpreadSide(
                         flipState.toPage,
                         flipState.direction === 'next' ? 'left' : 'right',
@@ -1367,15 +1359,15 @@ export default function PhysicalCatalogBookSection({
                           background:
                             flipState.direction === 'next'
                               ? `linear-gradient(270deg,
-                                  rgba(25,15,10,0.26) 0%,
-                                  rgba(255,255,255,0.46) ${Math.min(88, 22 + flipState.progress * 42)}%,
-                                  rgba(44,36,30,0.14) ${Math.min(96, 44 + flipState.progress * 38)}%,
-                                  rgba(255,255,255,0.2) 100%)`
+                                  rgba(25,15,10,0.24) 0%,
+                                  rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
+                                  rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
+                                  rgba(255,255,255,0.18) 100%)`
                               : `linear-gradient(90deg,
-                                  rgba(25,15,10,0.26) 0%,
-                                  rgba(255,255,255,0.46) ${Math.min(88, 22 + flipState.progress * 42)}%,
-                                  rgba(44,36,30,0.14) ${Math.min(96, 44 + flipState.progress * 38)}%,
-                                  rgba(255,255,255,0.2) 100%)`,
+                                  rgba(25,15,10,0.24) 0%,
+                                  rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
+                                  rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
+                                  rgba(255,255,255,0.18) 100%)`,
                         }}
                       />
                     </div>
@@ -1388,6 +1380,9 @@ export default function PhysicalCatalogBookSection({
                     onMouseEnter={() => setCornerHover('left')}
                     onMouseLeave={() => setCornerHover(null)}
                     onClick={() => triggerFlip(safePage - 1)}
+                    aria-label={
+                      safePage === 1 ? 'Tutup ke Sampul Depan' : 'Halaman sebelumnya'
+                    }
                     title={
                       safePage === 1
                         ? 'Tutup ke Sampul Depan'
@@ -1397,15 +1392,15 @@ export default function PhysicalCatalogBookSection({
                       width: cornerHover === 'left' ? '82px' : '54px',
                       height: cornerHover === 'left' ? '82px' : '54px',
                       background:
-                        'linear-gradient(45deg, #E5D7C1 0%, #EFE5D3 44%, #FFFDF8 50%, rgba(44,36,30,0.16) 52%, transparent 56%)',
+                        'linear-gradient(45deg, #E5D7C1 0%, #EFE5D3 44%, #FAF8F3 50%, rgba(28,25,23,0.15) 52%, transparent 56%)',
                       boxShadow:
                         cornerHover === 'left'
-                          ? '6px -6px 14px rgba(44,36,30,0.18)'
-                          : '2px -2px 6px rgba(44,36,30,0.08)',
+                          ? '6px -6px 14px rgba(28,25,23,0.16)'
+                          : '2px -2px 6px rgba(28,25,23,0.08)',
                     }}
-                    className="hidden lg:flex items-end justify-start p-2.5 absolute bottom-0 left-0 z-30 rounded-tr-xl transition-all duration-300 cursor-pointer"
+                    className="hidden lg:flex items-end justify-start p-2.5 absolute bottom-0 left-0 z-30 rounded-tr-md transition-all duration-300 cursor-pointer"
                   >
-                    <ChevronLeft className="w-3.5 h-3.5 text-[#8B3A1E]" />
+                    <ChevronLeft className="w-4 h-4 text-[#7C3219]" />
                   </button>
                 )}
 
@@ -1415,6 +1410,11 @@ export default function PhysicalCatalogBookSection({
                     onMouseEnter={() => setCornerHover('right')}
                     onMouseLeave={() => setCornerHover(null)}
                     onClick={() => triggerFlip(safePage + 1)}
+                    aria-label={
+                      safePage === backCoverPage - 1
+                        ? 'Tutup ke Sampul Belakang'
+                        : 'Halaman berikutnya'
+                    }
                     title={
                       safePage === backCoverPage - 1
                         ? 'Tutup ke Sampul Belakang'
@@ -1424,21 +1424,22 @@ export default function PhysicalCatalogBookSection({
                       width: cornerHover === 'right' ? '82px' : '54px',
                       height: cornerHover === 'right' ? '82px' : '54px',
                       background:
-                        'linear-gradient(315deg, #E5D7C1 0%, #EFE5D3 44%, #FFFDF8 50%, rgba(44,36,30,0.16) 52%, transparent 56%)',
+                        'linear-gradient(315deg, #E5D7C1 0%, #EFE5D3 44%, #FAF8F3 50%, rgba(28,25,23,0.15) 52%, transparent 56%)',
                       boxShadow:
                         cornerHover === 'right'
-                          ? '-6px -6px 14px rgba(44,36,30,0.18)'
-                          : '-2px -2px 6px rgba(44,36,30,0.08)',
+                          ? '-6px -6px 14px rgba(28,25,23,0.16)'
+                          : '-2px -2px 6px rgba(28,25,23,0.08)',
                     }}
-                    className="hidden lg:flex items-end justify-end p-2.5 absolute bottom-0 right-0 z-30 rounded-tl-xl transition-all duration-300 cursor-pointer"
+                    className="hidden lg:flex items-end justify-end p-2.5 absolute bottom-0 right-0 z-30 rounded-tl-md transition-all duration-300 cursor-pointer"
                   >
-                    <ChevronRight className="w-3.5 h-3.5 text-[#8B3A1E]" />
+                    <ChevronRight className="w-4 h-4 text-[#7C3219]" />
                   </button>
                 )}
               </div>
             </div>
           )}
         </div>
+        </FadeIn>
       </div>
     </section>
   );

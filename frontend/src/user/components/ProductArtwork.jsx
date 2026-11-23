@@ -3,11 +3,8 @@ import { drawProductMotifToCanvas } from '../utils/batikCanvas';
 
 function ProductArtwork({ product, imageUrl, size = 320, className = '' }) {
   const canvasRef = useRef(null);
-  const [imgStatus, setImgStatus] = useState('loading');
-
-  useEffect(() => {
-    setImgStatus(imageUrl ? 'loading' : 'fallback');
-  }, [imageUrl]);
+  const [loadedUrl, setLoadedUrl] = useState('');
+  const [failedUrl, setFailedUrl] = useState('');
 
   useEffect(() => {
     if (canvasRef.current && product) {
@@ -15,17 +12,20 @@ function ProductArtwork({ product, imageUrl, size = 320, className = '' }) {
     }
   }, [product, size]);
 
+  const showImg = Boolean(imageUrl) && failedUrl !== imageUrl;
+  const isLoaded = showImg && loadedUrl === imageUrl;
+
   return (
     <div className={`relative overflow-hidden ${className}`}>
       <canvas ref={canvasRef} className="w-full h-full object-cover block" />
-      {imageUrl && imgStatus !== 'fallback' && (
+      {showImg && (
         <img
           src={imageUrl}
           alt={product?.name || 'Produk Batik'}
-          onLoad={() => setImgStatus('loaded')}
-          onError={() => setImgStatus('fallback')}
+          onLoad={() => setLoadedUrl(imageUrl)}
+          onError={() => setFailedUrl(imageUrl)}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-            imgStatus === 'loaded' ? 'opacity-100' : 'opacity-0'
+            isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
         />
       )}

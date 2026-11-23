@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   ImagePlus,
   Trash2,
   Save,
-  Sparkles,
   Link as LinkIcon,
 } from 'lucide-react';
 import ProductArtwork from '../../user/components/ProductArtwork';
@@ -50,14 +49,26 @@ export default function SellerProductFormModal({
 }) {
   const defaultCategoryId = categories[0]?.id || 'cat-0001-0000-0000-000000000001';
 
-  const [name, setName] = useState('');
-  const [categoryId, setCategoryId] = useState(defaultCategoryId);
-  const [price, setPrice] = useState('150000');
-  const [description, setDescription] = useState('');
-  const [productLink, setProductLink] = useState('');
-  const [activeStatus, setActiveStatus] = useState(true);
-  const [attrValues, setAttrValues] = useState({});
-  const [imageUrls, setImageUrls] = useState([]);
+  const [name, setName] = useState(() => initialProduct?.name || '');
+  const [categoryId, setCategoryId] = useState(
+    () => initialProduct?.category_id || defaultCategoryId
+  );
+  const [price, setPrice] = useState(() =>
+    initialProduct ? String(initialProduct.price ?? '') : '150000'
+  );
+  const [description, setDescription] = useState(() => initialProduct?.description || '');
+  const [productLink, setProductLink] = useState(() => initialProduct?.product_link || '');
+  const [activeStatus, setActiveStatus] = useState(() =>
+    initialProduct ? initialProduct.active_status !== false : true
+  );
+  const [attrValues, setAttrValues] = useState(() => ({
+    ...(initialProduct?.additional_attribute || {}),
+  }));
+  const [imageUrls, setImageUrls] = useState(() =>
+    initialProduct
+      ? (initialProduct.displayImages || []).map((img) => img.image_url).filter(Boolean)
+      : []
+  );
   const [newUrlInput, setNewUrlInput] = useState('');
   const [uploadingImg, setUploadingImg] = useState(false);
 
@@ -66,33 +77,6 @@ export default function SellerProductFormModal({
       .filter((a) => a.category_id === categoryId)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [categoryAttributes, categoryId]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (initialProduct) {
-      setName(initialProduct.name || '');
-      setCategoryId(initialProduct.category_id || defaultCategoryId);
-      setPrice(String(initialProduct.price ?? ''));
-      setDescription(initialProduct.description || '');
-      setProductLink(initialProduct.product_link || '');
-      setActiveStatus(initialProduct.active_status !== false);
-      setAttrValues({ ...(initialProduct.additional_attribute || {}) });
-      setImageUrls(
-        (initialProduct.displayImages || []).map((img) => img.image_url).filter(Boolean)
-      );
-    } else {
-      setName('');
-      setCategoryId(defaultCategoryId);
-      setPrice('150000');
-      setDescription('');
-      setProductLink('');
-      setActiveStatus(true);
-      setAttrValues({});
-      setImageUrls([]);
-    }
-    setNewUrlInput('');
-  }, [isOpen, initialProduct, defaultCategoryId]);
 
   if (!isOpen) return null;
 
@@ -132,7 +116,6 @@ export default function SellerProductFormModal({
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Susun additional_attribute bersih sesuai skema kategori terpilih
     const cleanedAttributes = {};
     activeSchemaList.forEach((schema) => {
       const val = attrValues[schema.name];
@@ -165,22 +148,23 @@ export default function SellerProductFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-3xl rounded-3xl bg-[#FCF9F2] border border-[#DFD2BC] shadow-2xl overflow-hidden my-6">
+    <div className="fixed inset-0 z-50 bg-[#1C1917]/60 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-3xl rounded-lg bg-[#FAF8F3] border border-[#1C1917]/15 shadow-2xl overflow-hidden my-6 fade-panel">
         {/* Header Modal */}
-        <div className="px-6 py-4 bg-[#2C241E] text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-[#1B1714] text-[#F5F1E8] flex items-center justify-between border-b border-white/12">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300 block">
+            <span className="text-[13px] text-[#C4A46B] block">
               Manajemen Katalog Sanggar
             </span>
-            <h3 className="font-serif text-xl font-bold">
+            <h3 className="font-serif font-normal text-xl">
               {initialProduct ? `Edit Produk: ${initialProduct.name}` : 'Tambah Produk Batik Baru'}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+            aria-label="Tutup modal produk"
+            className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-md bg-white/10 hover:bg-white/20 text-[#F5F1E8] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -191,10 +175,10 @@ export default function SellerProductFormModal({
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
             {/* Pratinjau Visual Motif */}
             <div className="md:col-span-4 space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8B3A1E] block">
-                Pratinjau Tampilan Katalog
+              <span className="text-[13px] font-medium text-[#7C3219] block">
+                Pratinjau tampilan katalog
               </span>
-              <div className="aspect-[4/3] rounded-2xl overflow-hidden border border-[#DFD2BC] bg-white">
+              <div className="aspect-[4/3] rounded-md overflow-hidden border border-[#1C1917]/15 bg-[#FCFBF8]">
                 <ProductArtwork
                   product={previewProductObj}
                   imageUrl={imageUrls[0] || ''}
@@ -202,36 +186,41 @@ export default function SellerProductFormModal({
                   className="w-full h-full"
                 />
               </div>
-              <p className="text-[10.5px] text-[#6B5B4E] leading-relaxed">
-                Jika foto belum diunggah, sistem otomatis menampilkan ilustrasi motif batik sesuai nama produk Anda.
+              <p className="text-[13px] text-[#575049] leading-relaxed">
+                Jika foto belum diunggah, motif ilustrasi ditampilkan sesuai nama produk Anda.
               </p>
             </div>
 
             {/* Kolom Utama */}
             <div className="md:col-span-8 space-y-3.5">
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-[#2C241E]">
+              <div className="space-y-1.5">
+                <label htmlFor="prod-name" className="block text-[13px] font-medium text-[#1C1917]">
                   Nama Produk / Motif *
                 </label>
                 <input
+                  id="prod-name"
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Contoh: Batik Tulis Turonggo Yakso Sogan"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DFD2BC] text-xs font-medium text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                  className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="prod-category"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Kategori Produk *
                   </label>
                   <select
+                    id="prod-category"
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DFD2BC] text-xs font-bold text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   >
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
@@ -241,47 +230,54 @@ export default function SellerProductFormModal({
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="prod-price"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Harga Satuan (Rp) *
                   </label>
                   <input
+                    id="prod-price"
                     type="number"
                     min="1000"
                     step="500"
                     required
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#DFD2BC] text-xs font-bold text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[14px] font-medium text-[#1C1917] tabular-nums"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-[#2C241E]">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="prod-description"
+                  className="block text-[13px] font-medium text-[#1C1917]"
+                >
                   Filosofi &amp; Deskripsi Produk *
                 </label>
                 <textarea
+                  id="prod-description"
                   rows={3}
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Jelaskan makna motif, asal inspirasi Trenggalek, atau keunggulan kain..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#DFD2BC] text-xs text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                 />
               </div>
             </div>
           </div>
 
           {/* Atribut Dinamis Sesuai Skema Kategori */}
-          <div className="p-4 rounded-2xl bg-white border border-[#DFD2BC] space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#8B3A1E] flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Spesifikasi Wajib &amp; Tambahan Kategori</span>
+          <div className="p-4 rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[13px] font-medium text-[#7C3219]">
+                Spesifikasi kategori
               </span>
-              <span className="text-[10px] text-[#6B5B4E]">
-                Otomatis menyesuaikan kategori pilihan
+              <span className="text-[13px] text-[#575049]">
+                Menyesuaikan kategori pilihan
               </span>
             </div>
 
@@ -289,23 +285,26 @@ export default function SellerProductFormModal({
               {activeSchemaList.map((schema) => {
                 const label = formatAttributeLabel(schema.name);
                 const val = attrValues[schema.name];
+                const fieldId = `attr-${schema.name}`;
 
                 if (schema.type === 'boolean') {
                   return (
                     <label
                       key={schema.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] cursor-pointer"
+                      htmlFor={fieldId}
+                      className="flex items-center justify-between min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/15 cursor-pointer"
                     >
-                      <span className="text-xs font-bold text-[#2C241E]">
-                        {label} {schema.required && <span className="text-[#8B3A1E]">*</span>}
+                      <span className="text-[13px] font-medium text-[#1C1917]">
+                        {label} {schema.required && <span className="text-[#7C3219]">*</span>}
                       </span>
                       <input
+                        id={fieldId}
                         type="checkbox"
                         checked={Boolean(val)}
                         onChange={(e) =>
                           handleAttrChange(schema.name, 'boolean', e.target.checked)
                         }
-                        className="w-4 h-4 accent-[#8B3A1E]"
+                        className="w-4 h-4 accent-[#7C3219]"
                       />
                     </label>
                   );
@@ -313,10 +312,11 @@ export default function SellerProductFormModal({
 
                 return (
                   <div key={schema.id} className="space-y-1">
-                    <label className="block text-xs font-bold text-[#2C241E]">
-                      {label} {schema.required && <span className="text-[#8B3A1E]">*</span>}
+                    <label htmlFor={fieldId} className="block text-[13px] font-medium text-[#1C1917]">
+                      {label} {schema.required && <span className="text-[#7C3219]">*</span>}
                     </label>
                     <input
+                      id={fieldId}
                       type={schema.type === 'number' ? 'number' : 'text'}
                       required={schema.required}
                       value={val ?? ''}
@@ -334,7 +334,7 @@ export default function SellerProductFormModal({
                           ? '320'
                           : ''
                       }
-                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                      className="w-full min-h-[44px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                     />
                   </div>
                 );
@@ -343,15 +343,15 @@ export default function SellerProductFormModal({
           </div>
 
           {/* Galeri Foto Produk */}
-          <div className="p-4 rounded-2xl bg-white border border-[#DFD2BC] space-y-3">
+          <div className="p-4 rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#8B3A1E]">
-                Galeri Foto Produk ({imageUrls.length} Foto)
+              <span className="text-[13px] font-medium text-[#7C3219]">
+                Galeri foto produk ({imageUrls.length} foto)
               </span>
 
-              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#8B3A1E] hover:bg-[#A34424] text-white text-xs font-bold cursor-pointer">
-                <ImagePlus className="w-3.5 h-3.5" />
-                <span>{uploadingImg ? 'Memproses Foto...' : 'Unggah Foto dari Perangkat'}</span>
+              <label className="taste-btn-primary">
+                <ImagePlus className="w-4 h-4" />
+                <span>{uploadingImg ? 'Memproses Foto...' : 'Unggah Foto'}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -368,12 +368,13 @@ export default function SellerProductFormModal({
                 value={newUrlInput}
                 onChange={(e) => setNewUrlInput(e.target.value)}
                 placeholder="Atau tempel URL gambar (https://...)"
-                className="flex-1 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                aria-label="URL foto produk"
+                className="flex-1 min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
               />
               <button
                 type="button"
                 onClick={handleAddImageUrl}
-                className="px-3.5 py-2 rounded-xl bg-[#FAF7F2] hover:bg-amber-50 border border-[#DFD2BC] text-xs font-bold text-[#2C241E] cursor-pointer"
+                className="taste-btn-secondary shrink-0"
               >
                 Tambah URL
               </button>
@@ -384,19 +385,19 @@ export default function SellerProductFormModal({
                 {imageUrls.map((url, idx) => (
                   <div
                     key={`${idx}-${url.slice(0, 20)}`}
-                    className="relative group aspect-square rounded-xl overflow-hidden border border-[#DFD2BC] bg-[#FAF7F2]"
+                    className="relative group aspect-square rounded-md overflow-hidden border border-[#1C1917]/15 bg-[#F7F4EE]"
                   >
                     <img src={url} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
-                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-[9px] font-bold">
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-[#1B1714]/85 text-[#F5F1E8] text-[13px] font-medium tabular-nums">
                       #{idx + 1}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(idx)}
-                      className="absolute top-1 right-1 p-1 rounded-lg bg-red-600 text-white opacity-90 hover:opacity-100 cursor-pointer"
-                      title="Hapus foto"
+                      className="absolute top-1 right-1 p-1.5 rounded bg-[#9E2A2B] text-white opacity-90 hover:opacity-100 cursor-pointer"
+                      aria-label={`Hapus foto ${idx + 1}`}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
@@ -405,49 +406,50 @@ export default function SellerProductFormModal({
           </div>
 
           {/* Tautan Marketplace & Status Tayang */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-            <div className="sm:col-span-8 space-y-1">
-              <label className="block text-xs font-bold text-[#2C241E]">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-8 space-y-1.5">
+              <label
+                htmlFor="prod-marketplace"
+                className="block text-[13px] font-medium text-[#1C1917]"
+              >
                 Tautan Shopee / Tokopedia (Opsional)
               </label>
               <div className="relative">
-                <LinkIcon className="w-3.5 h-3.5 text-[#6B5B4E] absolute left-3 top-1/2 -translate-y-1/2" />
+                <LinkIcon className="w-4 h-4 text-[#575049] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="prod-marketplace"
                   type="url"
                   value={productLink}
                   onChange={(e) => setProductLink(e.target.value)}
                   placeholder="https://shopee.co.id/..."
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#DFD2BC] text-xs"
+                  className="w-full min-h-[44px] pl-10 pr-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                 />
               </div>
             </div>
 
-            <div className="sm:col-span-4 pt-4">
-              <label className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[#DFD2BC] cursor-pointer">
-                <span className="text-xs font-bold text-[#2C241E]">Tampilkan di Katalog</span>
+            <div className="sm:col-span-4">
+              <label
+                htmlFor="prod-active-status"
+                className="flex items-center justify-between min-h-[44px] px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 cursor-pointer"
+              >
+                <span className="text-[13px] font-medium text-[#1C1917]">Tampilkan di Katalog</span>
                 <input
+                  id="prod-active-status"
                   type="checkbox"
                   checked={activeStatus}
                   onChange={(e) => setActiveStatus(e.target.checked)}
-                  className="w-4 h-4 accent-emerald-600"
+                  className="w-4 h-4 accent-[#7C3219]"
                 />
               </label>
             </div>
           </div>
 
           {/* Tombol Aksi */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E6DDD0]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl bg-white hover:bg-stone-100 border border-[#DFD2BC] text-xs font-bold text-[#6B5B4E] cursor-pointer"
-            >
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#1C1917]/12">
+            <button type="button" onClick={onClose} className="taste-btn-secondary">
               Batal
             </button>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#8B3A1E] hover:bg-[#A34424] text-white text-xs font-bold shadow-xs cursor-pointer"
-            >
+            <button type="submit" className="taste-btn-primary">
               <Save className="w-4 h-4" />
               <span>{initialProduct ? 'Simpan Perubahan' : 'Terbitkan ke Buku Katalog'}</span>
             </button>

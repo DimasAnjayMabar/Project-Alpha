@@ -6,7 +6,9 @@ import {
   RotateCcw,
   ZoomIn,
   ZoomOut,
+  ArrowRight,
 } from 'lucide-react';
+import FadeIn from '../../components/FadeIn';
 import ProductArtwork from './ProductArtwork';
 import { drawProductMotifToCanvas } from '../utils/batikCanvas';
 import { formatRupiah, buildProductOrderWaUrl } from '../utils/helpers';
@@ -32,10 +34,14 @@ export default function Batik3DStudio({
   getEffectiveWa,
 }) {
   const [zoom, setZoom] = useState(1.0);
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
   const [lightMode, setLightMode] = useState('warm');
   const [studioShopFilter, setStudioShopFilter] = useState('ALL');
 
+  const sectionRef = useRef(null);
   const viewportRef = useRef(null);
   const mountRef = useRef(null);
   const sceneStateRef = useRef({
@@ -92,6 +98,7 @@ export default function Batik3DStudio({
 
   useEffect(() => {
     const container = mountRef.current;
+    const sectionEl = sectionRef.current;
     if (!container) return;
 
     const state = sceneStateRef.current;
@@ -184,10 +191,16 @@ export default function Batik3DStudio({
     });
     resizeObserver.observe(container);
 
-    let rafId;
+    let rafId = null;
+    let isSectionVisible = true;
     const clock = new THREE.Clock();
 
     const animate = () => {
+      if (!isSectionVisible || document.hidden) {
+        rafId = null;
+        return;
+      }
+
       rafId = requestAnimationFrame(animate);
       const elapsed = clock.getElapsedTime();
 
@@ -241,10 +254,48 @@ export default function Batik3DStudio({
 
       renderer.render(scene, camera);
     };
-    animate();
+
+    const startRenderLoop = () => {
+      if (rafId === null && isSectionVisible && !document.hidden) {
+        renderer.render(scene, camera);
+        rafId = requestAnimationFrame(animate);
+      }
+    };
+
+    let io = null;
+    if (sectionEl && typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[0];
+          isSectionVisible = Boolean(entry?.isIntersecting);
+          if (isSectionVisible) {
+            startRenderLoop();
+          } else if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+        },
+        { rootMargin: '120px 0px' }
+      );
+      io.observe(sectionEl);
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isSectionVisible) {
+        startRenderLoop();
+      } else if (document.hidden && rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    startRenderLoop();
 
     return () => {
-      cancelAnimationFrame(rafId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (io) io.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       resizeObserver.disconnect();
       disposeGroupChildren(modelGroup);
       if (state.batikMaterial.map) state.batikMaterial.map.dispose();
@@ -619,37 +670,46 @@ export default function Batik3DStudio({
   );
 
   return (
-    <section id="mockup-3d" className="py-14 sm:py-16 px-4 sm:px-6 bg-[#FAF7F2] border-t border-[#E6DDD0]">
-      <div className="max-w-7xl mx-auto">
-        <div className="max-w-3xl mb-8">
-          <span className="text-xs font-bold uppercase tracking-widest text-[#8B3A1E] block mb-1.5">
-            Pratinjau Busana &amp; Tekstil 3D • Pemesanan Langsung WhatsApp
+    <section
+      ref={sectionRef}
+      id="mockup-3d"
+      className="py-16 lg:py-24 bg-[#EFEAE0] border-t border-[#1C1917]/12"
+    >
+      <div className="taste-wrap">
+        <FadeIn className="max-w-3xl mb-8">
+          <span className="text-[13px] font-medium text-[#7C3219] block mb-2">
+            Pratinjau busana 3D · Pemesanan langsung WhatsApp
           </span>
-          <h2 className="font-serif text-2xl sm:text-4xl font-bold text-[#2C241E]">
+          <h2 className="font-serif font-normal text-[clamp(1.85rem,3vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
             Studio Mockup 3D Batik Trenggalek
           </h2>
-          <p className="text-xs sm:text-sm text-[#6B5B4E] mt-2 leading-relaxed">
-            Simulasikan produk pada potongan kemeja tailored, kain panjang wiru, atau tas butik, lalu pesan langsung ke WhatsApp sanggar.
+          <p className="text-[15px] text-[#575049] mt-2 leading-relaxed">
+            Simulasikan produk pada potongan kemeja tailored, kain panjang wiru, atau tas butik,
+            lalu pesan langsung ke WhatsApp sanggar.
           </p>
-        </div>
+        </FadeIn>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          <div className="lg:col-span-7 bg-white rounded-3xl border border-[#E6DDD0] p-3.5 sm:p-4 shadow-sm flex flex-col justify-between space-y-3">
+          <FadeIn
+            variant="scale"
+            delay={100}
+            className="lg:col-span-7 bg-[#FCFBF8] rounded-lg border border-[#1C1917]/12 p-4 sm:p-5 flex flex-col justify-between gap-4"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex flex-wrap gap-1 bg-[#FAF7F2] p-1 rounded-2xl border border-[#E6DDD0]">
+              <div className="inline-flex flex-wrap gap-1 bg-[#EFEAE0] p-1 rounded-md border border-[#1C1917]/12">
                 {[
                   { id: 'shirt', label: 'Kemeja Tailored' },
                   { id: 'fabric', label: 'Kain Panjang' },
-                  { id: 'tote', label: 'Tas Butik & Selendang' },
+                  { id: 'tote', label: 'Tas & Selendang' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectModel(tab.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    className={`min-h-[38px] px-3 py-1.5 rounded-sm text-[13px] font-medium transition-colors cursor-pointer ${
                       activeModel === tab.id
-                        ? 'bg-[#8B3A1E] text-white'
-                        : 'text-[#6B5B4E] hover:text-[#2C241E]'
+                        ? 'bg-[#7C3219] text-white'
+                        : 'text-[#575049] hover:text-[#1C1917]'
                     }`}
                   >
                     {tab.label}
@@ -663,9 +723,9 @@ export default function Batik3DStudio({
                   onClick={() =>
                     setLightMode((m) => (m === 'warm' ? 'day' : m === 'day' ? 'boutique' : 'warm'))
                   }
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE1] border border-[#E6DDD0] text-[#2C241E] text-[11px] font-semibold cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#1C1917] text-[13px] font-medium cursor-pointer"
                 >
-                  <Sun className="w-3.5 h-3.5 text-[#B8860B]" />
+                  <Sun className="w-3.5 h-3.5 text-[#7C3219]" />
                   <span>
                     {lightMode === 'warm'
                       ? 'Galeri Hangat'
@@ -677,11 +737,13 @@ export default function Batik3DStudio({
                 <button
                   type="button"
                   onClick={() => setAutoRotate((v) => !v)}
-                  className={`px-2.5 py-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE1] border border-[#E6DDD0] text-[11px] font-bold cursor-pointer ${
-                    autoRotate ? 'text-[#8B3A1E]' : 'text-[#6B5B4E]'
+                  className={`min-h-[40px] px-3 py-1.5 rounded-md border text-[13px] font-medium cursor-pointer transition-colors ${
+                    autoRotate
+                      ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
+                      : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
                   }`}
                 >
-                  Auto-Putar: {autoRotate ? 'ON' : 'OFF'}
+                  Auto-Putar: {autoRotate ? 'Aktif' : 'Jeda'}
                 </button>
                 <button
                   type="button"
@@ -690,9 +752,9 @@ export default function Batik3DStudio({
                     sceneStateRef.current.targetRotX = 0.08;
                     setZoom(1.0);
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE1] border border-[#E6DDD0] text-[#6B5B4E] hover:text-[#2C241E] text-[11px] font-semibold cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#575049] hover:text-[#1C1917] text-[13px] font-medium cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                   <span>Reset</span>
                 </button>
               </div>
@@ -704,71 +766,69 @@ export default function Batik3DStudio({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerUp}
-              className={`relative rounded-2xl overflow-hidden border border-[#E6DDD0] h-[380px] sm:h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
+              className={`relative rounded-md overflow-hidden border border-[#1C1917]/12 h-[380px] sm:h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
                 lightMode === 'warm'
-                  ? 'bg-gradient-to-b from-[#EFE6D8] via-[#E4D8C6] to-[#D4C3AC]'
+                  ? 'bg-gradient-to-b from-[#EDE5D7] via-[#E3D9C7] to-[#D4C6B1]'
                   : lightMode === 'day'
-                  ? 'bg-gradient-to-b from-[#EDF3F8] via-[#E2EBF3] to-[#CFDCE8]'
-                  : 'bg-gradient-to-b from-[#2B221B] via-[#3A2D23] to-[#1F1813]'
+                  ? 'bg-gradient-to-b from-[#EDF2F7] via-[#E2EAF2] to-[#CFDCE8]'
+                  : 'bg-[#1F1814]'
               }`}
             >
               <div ref={mountRef} className="w-full h-full" />
+            </div>
 
-              {activeProduct.mockupImage && (
-                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur-xs border border-[#E6DDD0] text-[10px] font-mono text-[#2C241E] pointer-events-none">
-                  Mockup Asset: {activeProduct.mockupImage.image_url}
-                </div>
-              )}
-
-              <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-xs border border-[#E6DDD0] text-[11px] text-[#6B5B4E] font-medium pointer-events-none">
-                Geser untuk memutar 360° • Scroll atau slider untuk zoom
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <ZoomOut className="w-4 h-4 text-[#575049] shrink-0" />
+                <input
+                  type="range"
+                  min="0.75"
+                  max="1.5"
+                  step="0.01"
+                  value={zoom}
+                  onChange={(e) => setZoom(parseFloat(e.target.value))}
+                  className="w-full accent-[#7C3219] cursor-pointer"
+                  aria-label="Zoom 3D Mockup"
+                />
+                <ZoomIn className="w-4 h-4 text-[#575049] shrink-0" />
               </div>
+              <p className="text-[13px] text-[#575049] text-center">
+                Seret untuk memutar 360° · Gulir atau geser kontrol untuk memperbesar
+              </p>
             </div>
+          </FadeIn>
 
-            <div className="flex items-center gap-3 px-1">
-              <ZoomOut className="w-4 h-4 text-[#6B5B4E] shrink-0" />
-              <input
-                type="range"
-                min="0.75"
-                max="1.5"
-                step="0.01"
-                value={zoom}
-                onChange={(e) => setZoom(parseFloat(e.target.value))}
-                className="w-full accent-[#8B3A1E] cursor-pointer"
-                aria-label="Zoom 3D Mockup"
-              />
-              <ZoomIn className="w-4 h-4 text-[#6B5B4E] shrink-0" />
-            </div>
-          </div>
-
-          <div className="lg:col-span-5 bg-white rounded-3xl border border-[#E6DDD0] p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-5">
-            <div className="space-y-4">
+          <FadeIn
+            delay={200}
+            className="lg:col-span-5 bg-[#FCFBF8] rounded-lg border border-[#1C1917]/12 p-5 sm:p-6 flex flex-col justify-between gap-5"
+          >
+            <div className="space-y-5">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B3A1E] block mb-2">
-                  1. Filter Toko &amp; Pilih Produk ({filteredStudioProducts.length})
+                <span className="text-[13px] font-medium text-[#7C3219] block mb-2.5">
+                  Pilih sanggar &amp; motif ({filteredStudioProducts.length} koleksi)
                 </span>
 
-                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                <div className="flex flex-wrap gap-1.5 mb-3">
                   <button
                     type="button"
                     onClick={() => setStudioShopFilter('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition-colors cursor-pointer ${
+                    className={`min-h-[38px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                       studioShopFilter === 'ALL'
-                        ? 'bg-[#2C241E] text-white border-[#2C241E]'
-                        : 'bg-[#FAF7F2] text-[#6B5B4E] border-[#E6DDD0] hover:border-[#8B3A1E]'
+                        ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
+                        : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
                     }`}
                   >
-                    Semua Toko
+                    Semua Sanggar
                   </button>
                   {activeShops.map((s) => (
                     <button
                       key={s.id}
                       type="button"
                       onClick={() => setStudioShopFilter(s.id)}
-                      className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition-colors cursor-pointer ${
+                      className={`min-h-[38px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
                         studioShopFilter === s.id
-                          ? 'bg-[#2C241E] text-white border-[#2C241E]'
-                          : 'bg-[#FAF7F2] text-[#6B5B4E] border-[#E6DDD0] hover:border-[#8B3A1E]'
+                          ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
+                          : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
                       }`}
                     >
                       {s.name}
@@ -776,7 +836,7 @@ export default function Batik3DStudio({
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
                   {filteredStudioProducts.map((prod) => {
                     const isSelected = prod.id === activeProduct.id;
                     return (
@@ -784,27 +844,27 @@ export default function Batik3DStudio({
                         key={prod.id}
                         type="button"
                         onClick={() => onSelectProduct(prod.id)}
-                        className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
+                        className={`p-2 rounded-md border text-left transition-colors flex items-center gap-2.5 cursor-pointer ${
                           isSelected
-                            ? 'border-[#8B3A1E] bg-[#FAF7F2] ring-1 ring-[#8B3A1E]/30'
-                            : 'border-[#E6DDD0] bg-white hover:border-[#8B3A1E]/50'
+                            ? 'border-[#7C3219] bg-[#F7F4EE] ring-1 ring-[#7C3219]/25'
+                            : 'border-[#1C1917]/12 bg-[#FCFBF8] hover:border-[#1C1917]/30'
                         }`}
                       >
                         <ProductArtwork
                           product={prod}
                           imageUrl={prod.primaryImageUrl}
-                          size={64}
-                          className="w-8 h-8 rounded-lg shrink-0 border border-[#E6DDD0]"
+                          size={72}
+                          className="w-10 h-10 rounded-sm shrink-0 border border-[#1C1917]/12"
                         />
                         <div className="min-w-0">
                           <span
-                            className={`block text-[11px] font-bold truncate ${
-                              isSelected ? 'text-[#8B3A1E]' : 'text-[#2C241E]'
+                            className={`block text-[13px] font-medium truncate ${
+                              isSelected ? 'text-[#7C3219]' : 'text-[#1C1917]'
                             }`}
                           >
                             {prod.name}
                           </span>
-                          <span className="block text-[9.5px] text-[#6B5B4E] truncate">
+                          <span className="block text-[13px] text-[#575049] truncate">
                             {prod.shop.name}
                           </span>
                         </div>
@@ -814,60 +874,61 @@ export default function Batik3DStudio({
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E6DDD0] space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
+              <div className="border-t border-[#1C1917]/12 pt-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <span className="text-[11px] font-bold text-[#8B3A1E] block">
-                      {activeProduct.shop.name} • {activeProduct.category.name}
+                    <span className="text-[13px] font-medium text-[#7C3219] block">
+                      {activeProduct.shop.name} · {activeProduct.category.name}
                     </span>
-                    <h3 className="font-serif text-xl font-bold text-[#2C241E]">{activeProduct.name}</h3>
+                    <h3 className="font-serif font-normal text-[22px] text-[#1C1917] leading-snug mt-0.5">
+                      {activeProduct.name}
+                    </h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => onOpenBookProduct(activeProduct.shop.id, activeProduct.id)}
-                    className="shrink-0 px-2.5 py-1 rounded-lg bg-white hover:bg-amber-50 border border-[#E6DDD0] text-[11px] font-bold text-[#8B3A1E] cursor-pointer"
+                    className="taste-link shrink-0 text-[13px] font-medium text-[#7C3219] min-h-[38px] cursor-pointer"
                   >
-                    Buka Buku &rarr;
+                    <span>Buka di Buku</span>
+                    <ArrowRight className="w-3.5 h-3.5 m-arrow" />
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-[#E6DDD0]">
-                  <span className="text-xs text-[#6B5B4E]">Harga Resmi Produk</span>
-                  <span className="text-base font-bold text-[#8B3A1E]">
+                <div className="flex items-center justify-between py-2.5 border-y border-[#1C1917]/12">
+                  <span className="text-[13px] text-[#575049]">Harga resmi produk</span>
+                  <span className="text-[15px] font-semibold text-[#1C1917] tabular-nums">
                     {formatRupiah(activeProduct.price)}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <dl className="divide-y divide-[#1C1917]/10 text-[13px]">
                   {activeProduct.formattedAttributes.slice(0, 4).map((attr) => (
-                    <div key={attr.name} className="p-2 rounded-xl bg-white border border-[#E6DDD0]">
-                      <span className="block text-[9px] uppercase font-bold text-[#6B5B4E]">
-                        {attr.label}
-                      </span>
-                      <span className="block text-[11px] font-bold text-[#2C241E] truncate">
+                    <div key={attr.name} className="py-2 flex items-center justify-between gap-3">
+                      <dt className="text-[#575049]">{attr.label}</dt>
+                      <dd className="font-medium text-[#1C1917] text-right truncate">
                         {attr.displayValue}
-                      </span>
+                      </dd>
                     </div>
                   ))}
-                </div>
+                </dl>
               </div>
             </div>
 
-            <div className="space-y-2.5 pt-2 border-t border-[#E6DDD0]">
+            <div className="space-y-2.5 pt-3 border-t border-[#1C1917]/12">
               <a
                 href={waHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors flex items-center justify-center gap-2"
+                className="taste-btn-primary w-full"
               >
-                <MessageCircle className="w-4 h-4" />
+                <MessageCircle className="w-4 h-4 shrink-0" />
                 <span>Pesan Produk Ini via WhatsApp</span>
               </a>
-              <p className="text-[11px] text-center text-[#6B5B4E]">
-                Pesan otomatis mengirim detail produk &amp; spesifikasi ke WhatsApp +{effectiveWa}
+              <p className="text-[13px] text-center text-[#575049] tabular-nums">
+                Detail produk dikirim langsung ke WhatsApp +{effectiveWa}
               </p>
             </div>
-          </div>
+          </FadeIn>
         </div>
       </div>
     </section>

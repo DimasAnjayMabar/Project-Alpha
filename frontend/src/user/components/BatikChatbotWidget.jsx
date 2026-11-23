@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Bot,
+  MessageSquare,
   Send,
   X,
   BookOpen,
   Layers,
   MessageCircle,
-  Sparkles,
 } from 'lucide-react';
 import ProductArtwork from './ProductArtwork';
 import { formatRupiah, buildProductOrderWaUrl } from '../utils/helpers';
@@ -80,36 +79,30 @@ export default function BatikChatbotWidget({
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
       {/* Jendela Obrolan */}
       {isOpen && (
-        <div className="mb-3 w-[340px] sm:w-[390px] h-[500px] max-h-[78vh] rounded-3xl bg-[#FCF9F2] border border-[#DFD2BC] shadow-[0_20px_50px_rgba(32,19,12,0.28)] flex flex-col overflow-hidden">
+        <div className="mb-3 w-[340px] sm:w-[390px] h-[510px] max-h-[78vh] rounded-lg bg-[#FAF8F3] border border-[#1C1917]/15 shadow-[0_18px_48px_rgba(28,25,23,0.22)] flex flex-col overflow-hidden fade-panel">
           {/* Header */}
-          <div className="px-4 py-3.5 bg-gradient-to-r from-[#2C241E] to-[#4A2516] text-white flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-400 text-[#2C241E] flex items-center justify-center shrink-0">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="font-serif font-bold text-sm block leading-tight">
-                  Asisten Wastra Trenggalek
-                </span>
-                <span className="text-[10px] text-amber-300 flex items-center gap-1">
-                  <Sparkles className="w-2.5 h-2.5" />
-                  <span>Siap bantu cari motif &amp; sanggar</span>
-                </span>
-              </div>
+          <div className="px-4 py-3.5 bg-[#1B1714] text-[#F5F1E8] flex items-center justify-between border-b border-white/12">
+            <div>
+              <span className="font-serif font-normal text-base block leading-tight">
+                Asisten Wastra Trenggalek
+              </span>
+              <span className="text-[13px] text-[#B5ACA2] block mt-0.5">
+                Bantu cari motif, harga, dan sanggar
+              </span>
             </div>
 
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-              aria-label="Tutup Chatbot"
+              className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-md bg-white/10 hover:bg-white/20 text-[#F5F1E8] cursor-pointer"
+              aria-label="Tutup asisten"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Area Pesan */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.map((msg) => {
               const isUser = msg.sender === 'user';
               return (
@@ -118,10 +111,10 @@ export default function BatikChatbotWidget({
                   className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-2`}
                 >
                   <div
-                    className={`max-w-[86%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed whitespace-pre-line ${
+                    className={`max-w-[86%] px-3.5 py-2.5 rounded-md text-[14px] leading-relaxed whitespace-pre-line ${
                       isUser
-                        ? 'bg-[#8B3A1E] text-white rounded-br-sm'
-                        : 'bg-white text-[#2C241E] border border-[#E6DDD0] rounded-bl-sm shadow-2xs'
+                        ? 'bg-[#7C3219] text-white'
+                        : 'bg-[#FCFBF8] text-[#1C1917] border border-[#1C1917]/12'
                     }`}
                   >
                     {msg.text}
@@ -141,23 +134,23 @@ export default function BatikChatbotWidget({
                         return (
                           <div
                             key={prod.id}
-                            className="p-2.5 rounded-2xl bg-white border border-[#DFD2BC] space-y-2 shadow-2xs"
+                            className="p-3 rounded-md bg-[#FCFBF8] border border-[#1C1917]/12 space-y-2.5"
                           >
-                            <div className="flex items-center gap-2.5">
+                            <div className="flex items-center gap-3">
                               <ProductArtwork
                                 product={prod}
                                 imageUrl={prod.primaryImageUrl}
                                 size={96}
-                                className="w-12 h-12 rounded-xl shrink-0 border border-[#E6DDD0]"
+                                className="w-14 h-12 rounded-sm shrink-0 border border-[#1C1917]/12"
                               />
                               <div className="min-w-0 flex-1">
-                                <span className="text-[10px] font-bold text-[#8B3A1E] block truncate">
+                                <span className="text-[13px] font-medium text-[#7C3219] block truncate">
                                   {prod.shop.name}
                                 </span>
-                                <span className="font-serif font-bold text-xs text-[#2C241E] block truncate">
+                                <span className="font-serif font-medium text-[15px] text-[#1C1917] block truncate">
                                   {prod.name}
                                 </span>
-                                <span className="text-[11px] font-bold text-emerald-700">
+                                <span className="text-[13px] font-semibold text-[#1C1917] tabular-nums">
                                   {formatRupiah(prod.price)}
                                 </span>
                               </div>
@@ -170,9 +163,9 @@ export default function BatikChatbotWidget({
                                   onOpenBookProduct(prod.shop.id, prod.id);
                                   setIsOpen(false);
                                 }}
-                                className="py-1.5 px-2 rounded-lg bg-[#FAF7F2] hover:bg-amber-50 border border-[#E6DDD0] text-[10px] font-bold text-[#2C241E] flex items-center justify-center gap-1 cursor-pointer"
+                                className="min-h-[38px] px-2 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
                               >
-                                <BookOpen className="w-3 h-3 text-[#8B3A1E]" />
+                                <BookOpen className="w-3.5 h-3.5 text-[#7C3219]" />
                                 <span>Buku</span>
                               </button>
                               <button
@@ -181,18 +174,18 @@ export default function BatikChatbotWidget({
                                   onTryIn3D(prod.id);
                                   setIsOpen(false);
                                 }}
-                                className="py-1.5 px-2 rounded-lg bg-[#FAF7F2] hover:bg-amber-50 border border-[#E6DDD0] text-[10px] font-bold text-[#2C241E] flex items-center justify-center gap-1 cursor-pointer"
+                                className="min-h-[38px] px-2 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
                               >
-                                <Layers className="w-3 h-3 text-[#8B3A1E]" />
+                                <Layers className="w-3.5 h-3.5 text-[#7C3219]" />
                                 <span>3D</span>
                               </button>
                               <a
                                 href={waUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center gap-1"
+                                className="min-h-[38px] px-2 rounded-md bg-[#7C3219] hover:bg-[#632612] text-white text-[13px] font-medium flex items-center justify-center gap-1"
                               >
-                                <MessageCircle className="w-3 h-3" />
+                                <MessageCircle className="w-3.5 h-3.5" />
                                 <span>WA</span>
                               </a>
                             </div>
@@ -206,7 +199,7 @@ export default function BatikChatbotWidget({
             })}
 
             {isTyping && (
-              <div className="inline-block px-3.5 py-2 rounded-2xl bg-white border border-[#E6DDD0] text-[11px] text-[#6B5B4E] italic">
+              <div className="inline-block px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/12 text-[13px] text-[#575049] italic">
                 Asisten sedang mengetik...
               </div>
             )}
@@ -214,13 +207,13 @@ export default function BatikChatbotWidget({
           </div>
 
           {/* Pilihan Pertanyaan Cepat */}
-          <div className="px-3 py-2 bg-[#F4ECE0] border-t border-[#E6DDD0] flex gap-1.5 overflow-x-auto">
+          <div className="px-3 py-2 bg-[#EFEAE0] border-t border-[#1C1917]/12 flex gap-1.5 overflow-x-auto">
             {QUICK_PROMPTS.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
                 onClick={() => handleSendMessage(prompt)}
-                className="shrink-0 px-2.5 py-1 rounded-full bg-white hover:bg-amber-50 border border-[#DFD2BC] text-[10px] font-bold text-[#2C241E] cursor-pointer"
+                className="shrink-0 min-h-[36px] px-3 py-1 rounded-md bg-[#FCFBF8] hover:bg-white border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] cursor-pointer"
               >
                 {prompt}
               </button>
@@ -233,34 +226,35 @@ export default function BatikChatbotWidget({
               e.preventDefault();
               handleSendMessage();
             }}
-            className="p-2.5 bg-white border-t border-[#E6DDD0] flex items-center gap-2"
+            className="p-2.5 bg-[#FCFBF8] border-t border-[#1C1917]/12 flex items-center gap-2"
           >
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="Tanya motif, harga, atau sanggar..."
-              className="flex-1 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+              aria-label="Ketik pertanyaan untuk asisten katalog"
+              className="flex-1 min-h-[44px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
             />
             <button
               type="submit"
               disabled={!inputText.trim() || isTyping}
-              className="p-2.5 rounded-xl bg-[#8B3A1E] hover:bg-[#A34424] disabled:opacity-40 text-white cursor-pointer disabled:cursor-not-allowed"
-              aria-label="Kirim Pesan"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-md bg-[#7C3219] hover:bg-[#632612] disabled:opacity-40 text-white cursor-pointer disabled:cursor-not-allowed transition-colors"
+              aria-label="Kirim pesan"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-4 h-4" />
             </button>
           </form>
         </div>
       )}
 
-      {/* Tombol Melayang (Floating Button) */}
+      {/* Tombol Melayang */}
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="inline-flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#2C241E] hover:bg-[#3F342B] text-amber-300 border border-amber-400/40 shadow-[0_12px_30px_rgba(32,19,12,0.35)] text-xs font-bold transition-transform hover:scale-105 cursor-pointer"
+        className="inline-flex items-center gap-2.5 min-h-[44px] px-4 py-2.5 rounded-md bg-[#1B1714] hover:bg-[#2A2420] text-[#F5F1E8] border border-white/15 shadow-[0_8px_24px_rgba(28,25,23,0.2)] text-[14px] font-medium transition-colors cursor-pointer"
       >
-        <Bot className="w-4 h-4" />
+        <MessageSquare className="w-4 h-4 text-[#C4A46B]" />
         <span>{isOpen ? 'Tutup Asisten' : 'Tanya Asisten Batik'}</span>
       </button>
     </div>

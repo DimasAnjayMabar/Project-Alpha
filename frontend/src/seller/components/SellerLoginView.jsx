@@ -3,7 +3,6 @@ import {
   ShieldCheck,
   Mail,
   Lock,
-  Store,
   ArrowLeft,
   UserPlus,
   LogIn,
@@ -68,58 +67,68 @@ export default function SellerLoginView({ db, onLoginSuccess, onBackToCatalog })
     .filter((item) => item.shop);
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#2C241E] flex flex-col justify-between">
+    <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] flex flex-col justify-between">
       {/* Header Atas */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-[#E6DDD0] px-4 sm:px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-[#2C241E] text-amber-300 flex items-center justify-center font-serif font-bold text-lg">
-            B
+      <header className="bg-[#F7F4EE] border-b border-[#1C1917]/12">
+        <div className="taste-wrap h-[72px] flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 32 32"
+              fill="none"
+              aria-hidden="true"
+              className="shrink-0"
+            >
+              <path d="M16 4L28 16L16 28L4 16L16 4Z" stroke="#7C3219" strokeWidth="2" />
+              <circle cx="16" cy="16" r="3.5" fill="#7C3219" />
+            </svg>
+            <div>
+              <span className="font-aksara text-[20px] sm:text-[22px] block leading-none text-[#1C1917]">
+                Batik Wicara Trenggalek
+              </span>
+              <span className="text-[13px] text-[#575049] block mt-1">
+                Portal Perajin UMKM
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="font-serif font-bold text-base block leading-none">
-              Portal Seller UMKM
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B3A1E]">
-              Batik Wicara Trenggalek
-            </span>
-          </div>
-        </div>
 
-        <button
-          type="button"
-          onClick={onBackToCatalog}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAF7F2] hover:bg-amber-50 border border-[#E6DDD0] text-xs font-bold text-[#2C241E] cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 text-[#8B3A1E]" />
-          <span>Kembali ke Etalase Pembeli</span>
-        </button>
+          <button
+            type="button"
+            onClick={onBackToCatalog}
+            className="taste-btn-secondary"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#7C3219]" />
+            <span>Kembali ke Etalase</span>
+          </button>
+        </div>
       </header>
 
       {/* Konten Utama */}
-      <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <main className="taste-wrap w-full py-10 lg:py-14 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Kolom Kiri: Info Keamanan & Daftar Akun Sanggar */}
-        <div className="lg:col-span-5 space-y-5">
-          <div className="rounded-3xl bg-gradient-to-br from-[#2C241E] via-[#3A281E] to-[#562917] text-white p-6 space-y-4 shadow-md">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-amber-300 text-[11px] font-bold">
+        <div className="lg:col-span-5 space-y-5 hero-enter-title">
+          <div className="rounded-lg bg-[#1B1714] text-[#F5F1E8] p-6 sm:p-7 space-y-4">
+            <div className="inline-flex items-center gap-2 text-[#C4A46B] text-[13px] font-medium">
               <ShieldCheck className="w-4 h-4" />
-              <span>Isolasi Hak Akses Per UMKM</span>
+              <span>Isolasi hak akses per sanggar</span>
             </div>
-            <h1 className="font-serif text-2xl font-bold leading-snug">
-              Kelola Katalog Sanggar Anda Secara Mandiri &amp; Aman
+            <h1 className="font-serif font-normal text-2xl sm:text-3xl leading-snug">
+              Kelola Katalog Sanggar Secara Mandiri
             </h1>
-            <p className="text-xs text-stone-200 leading-relaxed">
-              Setiap akun pengelola terkunci pada satu sanggar UMKM. Anda bebas menambah, memperbarui, maupun menghapus produk sanggar Anda sendiri tanpa risiko tercampur dengan sanggar lain.
+            <p className="text-[14px] text-[#B5ACA2] leading-relaxed">
+              Setiap akun pengelola terkunci pada satu sanggar UMKM. Anda dapat menambah,
+              memperbarui, maupun menghapus koleksi sanggar Anda sendiri tanpa tercampur dengan
+              sanggar lain.
             </p>
           </div>
 
-          <div className="rounded-3xl bg-white border border-[#E6DDD0] p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#8B3A1E]">
-                Akun Sanggar Terdaftar ({registeredSellers.length})
+          <div className="rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 p-5 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-medium text-[#7C3219]">
+                Akun sanggar terdaftar ({registeredSellers.length})
               </span>
-              <span className="text-[10px] font-mono bg-[#FAF7F2] px-2 py-0.5 rounded border border-[#E6DDD0] text-[#6B5B4E]">
-                PIN Demo: 123456
-              </span>
+              <span className="text-[13px] font-mono text-[#575049]">PIN Demo: 123456</span>
             </div>
 
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -130,21 +139,21 @@ export default function SellerLoginView({ db, onLoginSuccess, onBackToCatalog })
                     key={account.id}
                     type="button"
                     onClick={() => handleQuickFillAccount(account.email)}
-                    className={`w-full p-3 rounded-2xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                    className={`w-full min-h-[52px] p-3 rounded-md border text-left transition-colors flex items-center justify-between gap-3 cursor-pointer ${
                       isSelected
-                        ? 'bg-amber-50/90 border-[#8B3A1E] ring-1 ring-[#8B3A1E]/25'
-                        : 'bg-[#FAF7F2] hover:bg-white border-[#E6DDD0]'
+                        ? 'bg-[#EFEAE0] border-[#7C3219]'
+                        : 'bg-[#F7F4EE] hover:bg-white border-[#1C1917]/12'
                     }`}
                   >
                     <div className="min-w-0">
-                      <span className="font-serif font-bold text-xs text-[#2C241E] block truncate">
+                      <span className="font-serif font-medium text-[15px] text-[#1C1917] block truncate">
                         {shop.name}
                       </span>
-                      <span className="text-[10.5px] text-[#6B5B4E] block truncate">
-                        {account.display_name} • {account.email}
+                      <span className="text-[13px] text-[#575049] block truncate">
+                        {account.display_name} · {account.email}
                       </span>
                     </div>
-                    <span className="shrink-0 text-[10px] font-bold text-[#8B3A1E] px-2 py-1 rounded-lg bg-white border border-[#E6DDD0]">
+                    <span className="shrink-0 text-[13px] font-medium text-[#7C3219]">
                       Pilih
                     </span>
                   </button>
@@ -155,22 +164,22 @@ export default function SellerLoginView({ db, onLoginSuccess, onBackToCatalog })
         </div>
 
         {/* Kolom Kanan: Form Login / Registrasi */}
-        <div className="lg:col-span-7 rounded-3xl bg-white border border-[#E6DDD0] p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="lg:col-span-7 rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 p-6 sm:p-8 space-y-6 hero-enter-step-1">
           {/* Tab Switcher */}
-          <div className="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl bg-[#FAF7F2] border border-[#E6DDD0]">
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-md bg-[#EFEAE0] border border-[#1C1917]/12">
             <button
               type="button"
               onClick={() => {
                 setMode('login');
                 setErrorMsg('');
               }}
-              className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+              className={`min-h-[42px] px-3 rounded-sm text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
                 mode === 'login'
-                  ? 'bg-[#8B3A1E] text-white shadow-xs'
-                  : 'text-[#6B5B4E] hover:text-[#2C241E]'
+                  ? 'bg-[#1B1714] text-[#F5F1E8]'
+                  : 'text-[#575049] hover:text-[#1C1917]'
               }`}
             >
-              <LogIn className="w-3.5 h-3.5" />
+              <LogIn className="w-4 h-4" />
               <span>Masuk Akun Sanggar</span>
             </button>
             <button
@@ -179,191 +188,222 @@ export default function SellerLoginView({ db, onLoginSuccess, onBackToCatalog })
                 setMode('register');
                 setErrorMsg('');
               }}
-              className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+              className={`min-h-[42px] px-3 rounded-sm text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
                 mode === 'register'
-                  ? 'bg-[#8B3A1E] text-white shadow-xs'
-                  : 'text-[#6B5B4E] hover:text-[#2C241E]'
+                  ? 'bg-[#1B1714] text-[#F5F1E8]'
+                  : 'text-[#575049] hover:text-[#1C1917]'
               }`}
             >
-              <UserPlus className="w-3.5 h-3.5" />
+              <UserPlus className="w-4 h-4" />
               <span>Daftar UMKM Baru</span>
             </button>
           </div>
 
           {errorMsg && (
-            <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs font-medium flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-md bg-[#9E2A2B]/8 border border-[#9E2A2B]/30 text-[#9E2A2B] text-[13px] font-medium flex items-start gap-2.5 fade-panel">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {mode === 'login' ? (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <form key="login-form" onSubmit={handleLoginSubmit} className="space-y-4 fade-swap">
               <div>
-                <h2 className="font-serif text-2xl font-bold text-[#2C241E]">
+                <h2 className="font-serif font-normal text-2xl text-[#1C1917]">
                   Masuk ke Dasbor Pengelola
                 </h2>
-                <p className="text-xs text-[#6B5B4E] mt-1">
+                <p className="text-[14px] text-[#575049] mt-1">
                   Gunakan email pengelola sanggar yang terdaftar pada sistem Batik Wicara.
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#2C241E]">
+                <label htmlFor="login-email" className="block text-[13px] font-medium text-[#1C1917]">
                   Email Pengelola Sanggar
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-[#6B5B4E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-[#575049] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="login-email"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="nama.sanggar@gmail.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs font-medium text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                    className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#2C241E]">
+                <label
+                  htmlFor="login-password"
+                  className="block text-[13px] font-medium text-[#1C1917]"
+                >
                   Kata Sandi / PIN Akses Sanggar
                 </label>
                 <div className="relative">
-                  <KeyRound className="w-4 h-4 text-[#6B5B4E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <KeyRound className="w-4 h-4 text-[#575049] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    id="login-password"
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Masukkan kata sandi"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs font-medium text-[#2C241E] focus:outline-none focus:border-[#8B3A1E]"
+                    className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className="w-full py-3 px-4 rounded-xl bg-[#8B3A1E] hover:bg-[#A34424] text-white text-xs sm:text-sm font-bold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
+              <button type="submit" className="taste-btn-primary w-full">
                 <Lock className="w-4 h-4" />
                 <span>Masuk &amp; Kelola Katalog UMKM</span>
               </button>
             </form>
           ) : (
-            <form onSubmit={handleRegisterSubmit} className="space-y-4">
+            <form
+              key="register-form"
+              onSubmit={handleRegisterSubmit}
+              className="space-y-4 fade-swap"
+            >
               <div>
-                <h2 className="font-serif text-2xl font-bold text-[#2C241E]">
+                <h2 className="font-serif font-normal text-2xl text-[#1C1917]">
                   Pendaftaran Sentra UMKM Baru
                 </h2>
-                <p className="text-xs text-[#6B5B4E] mt-1">
+                <p className="text-[14px] text-[#575049] mt-1">
                   Otomatis membuat buku katalog khusus untuk sanggar Anda di etalase utama.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="reg-display-name"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Nama Lengkap Pengelola *
                   </label>
                   <input
+                    id="reg-display-name"
                     type="text"
                     required
                     value={regForm.displayName}
                     onChange={(e) => setRegForm({ ...regForm, displayName: e.target.value })}
                     placeholder="Contoh: Ibu Siti Aminah"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="reg-shop-name"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Nama Sanggar / Toko UMKM *
                   </label>
                   <input
+                    id="reg-shop-name"
                     type="text"
                     required
                     value={regForm.shopName}
                     onChange={(e) => setRegForm({ ...regForm, shopName: e.target.value })}
                     placeholder="Contoh: Batik Tulis Panggul"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="reg-email"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Email Login *
                   </label>
                   <input
+                    id="reg-email"
                     type="email"
                     required
                     value={regForm.email}
                     onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
                     placeholder="batikpanggul@gmail.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="reg-password"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Buat Kata Sandi / PIN *
                   </label>
                   <input
+                    id="reg-password"
                     type="password"
                     required
                     value={regForm.password}
                     onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
                     placeholder="Minimal 6 karakter"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="reg-whatsapp"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Nomor WhatsApp Pemesanan *
                   </label>
                   <input
+                    id="reg-whatsapp"
                     type="text"
                     required
                     value={regForm.whatsapp}
                     onChange={(e) => setRegForm({ ...regForm, whatsapp: e.target.value })}
                     placeholder="081234567890"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#2C241E]">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="reg-address"
+                    className="block text-[13px] font-medium text-[#1C1917]"
+                  >
                     Alamat Bengkel / Galeri *
                   </label>
                   <input
+                    id="reg-address"
                     type="text"
                     required
                     value={regForm.address}
                     onChange={(e) => setRegForm({ ...regForm, address: e.target.value })}
                     placeholder="Kec. Panggul, Kab. Trenggalek"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-[#2C241E]">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="reg-description"
+                  className="block text-[13px] font-medium text-[#1C1917]"
+                >
                   Deskripsi Singkat Sanggar
                 </label>
                 <textarea
+                  id="reg-description"
                   rows={2}
                   value={regForm.description}
                   onChange={(e) => setRegForm({ ...regForm, description: e.target.value })}
                   placeholder="Ceritakan keunikan motif atau teknik pembatikan sanggar Anda..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#FAF7F2] border border-[#E6DDD0] text-xs"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
                 />
               </div>
 
-              <button
-                type="submit"
-                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
+              <button type="submit" className="taste-btn-primary w-full">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Daftarkan UMKM &amp; Masuk Dasbor</span>
               </button>
@@ -372,8 +412,8 @@ export default function SellerLoginView({ db, onLoginSuccess, onBackToCatalog })
         </div>
       </main>
 
-      <footer className="py-5 px-4 text-center text-[11px] text-[#6B5B4E] border-t border-[#E6DDD0]">
-        Sistem Manajemen Katalog Terisolasi Per Sanggar • Kabupaten Trenggalek
+      <footer className="py-5 px-4 text-center text-[13px] text-[#575049] border-t border-[#1C1917]/12">
+        Sistem Manajemen Katalog Terisolasi Per Sanggar · Kabupaten Trenggalek
       </footer>
     </div>
   );

@@ -21,12 +21,11 @@ export default function App() {
   );
   const [focusShopId, setFocusShopId] = useState(null);
 
-  // Pastikan URL root (/) otomatis diarahkan ke /user
+  // Pastikan URL root (/) diarahkan ke /user tanpa memicu render ulang berlebih
   useEffect(() => {
     const cleanPath = window.location.pathname.toLowerCase().replace(/\/+$/, '');
     if (cleanPath !== '/user' && cleanPath !== '/seller') {
       window.history.replaceState({}, '', '/user');
-      setActiveRoute('user');
     }
   }, []);
 
@@ -60,15 +59,21 @@ export default function App() {
     window.history.pushState({}, '', '/user');
     setFocusShopId(shopIdToFocus);
     setActiveRoute('user');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
+  const navigateToSellerPortal = () => {
+    window.history.pushState({}, '', '/seller');
+    setActiveRoute('seller');
+    window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
   if (activeRoute === 'seller') {
     return (
       <Suspense
         fallback={
-          <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center font-serif text-lg font-bold text-[#2C241E]">
-            Memuat Portal Seller UMKM...
+          <div className="min-h-screen bg-[#F7F4EE] flex items-center justify-center font-serif text-lg text-[#1C1917]">
+            Memuat Portal Perajin...
           </div>
         }
       >
@@ -83,9 +88,11 @@ export default function App() {
 
   return (
     <UserCatalogPage
+      key={focusShopId || 'default'}
       externalDb={db}
       onExternalDbChange={setDb}
       initialFocusShopId={focusShopId}
+      onOpenSellerPortal={navigateToSellerPortal}
     />
   );
 }

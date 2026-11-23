@@ -45,7 +45,7 @@ export function formatAttributeLabel(attrName = '') {
 export function formatAttributeValue(attrSchema, rawVal) {
   if (rawVal === undefined || rawVal === null || rawVal === '') return '-';
   if (attrSchema.type === 'boolean') {
-    return Boolean(rawVal) ? 'Ya' : 'Tidak';
+    return rawVal ? 'Ya' : 'Tidak';
   }
   if (attrSchema.type === 'number') {
     const num = Number(rawVal);
