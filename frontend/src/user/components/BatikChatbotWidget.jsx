@@ -163,7 +163,7 @@ export default function BatikChatbotWidget({
                                   onOpenBookProduct(prod.shop.id, prod.id);
                                   setIsOpen(false);
                                 }}
-                                className="min-h-[38px] px-2 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
+                                className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
                               >
                                 <BookOpen className="w-3.5 h-3.5 text-[#7C3219]" />
                                 <span>Buku</span>
@@ -174,7 +174,7 @@ export default function BatikChatbotWidget({
                                   onTryIn3D(prod.id);
                                   setIsOpen(false);
                                 }}
-                                className="min-h-[38px] px-2 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
+                                className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
                               >
                                 <Layers className="w-3.5 h-3.5 text-[#7C3219]" />
                                 <span>3D</span>
@@ -183,7 +183,7 @@ export default function BatikChatbotWidget({
                                 href={waUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="min-h-[38px] px-2 rounded-md bg-[#7C3219] hover:bg-[#632612] text-white text-[13px] font-medium flex items-center justify-center gap-1"
+                                className="min-h-[38px] px-2 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[13px] font-medium flex items-center justify-center gap-1 transition-colors"
                               >
                                 <MessageCircle className="w-3.5 h-3.5" />
                                 <span>WA</span>
@@ -252,7 +252,7 @@ export default function BatikChatbotWidget({
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="inline-flex items-center gap-2.5 min-h-[44px] px-4 py-2.5 rounded-md bg-[#1B1714] hover:bg-[#2A2420] text-[#F5F1E8] border border-white/15 shadow-[0_8px_24px_rgba(28,25,23,0.2)] text-[14px] font-medium transition-colors cursor-pointer"
+        className="inline-flex items-center gap-2.5 min-h-[44px] px-4 py-2.5 rounded-[10px] bg-[#1B1714] hover:bg-[#2A2420] text-[#F5F1E8] border border-white/15 shadow-[0_8px_24px_rgba(28,25,23,0.2)] text-[14px] font-medium transition-colors cursor-pointer"
       >
         <MessageSquare className="w-4 h-4 text-[#C4A46B]" />
         <span>{isOpen ? 'Tutup Asisten' : 'Tanya Asisten Batik'}</span>

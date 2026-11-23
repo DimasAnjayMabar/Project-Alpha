@@ -61,12 +61,10 @@ export default function UserCatalogPage({
 
   // State Menu & Popover Header
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [headerSearchOpen, setHeaderSearchOpen] = useState(false);
   const [sanggarContactOpen, setSanggarContactOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
   const headerRef = useRef(null);
-  const headerSearchInputRef = useRef(null);
   const jsonInputRef = useRef(null);
 
   const [gridCols, setGridCols] = useState(() => {
@@ -90,13 +88,11 @@ export default function UserCatalogPage({
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (headerRef.current && !headerRef.current.contains(e.target)) {
-        setHeaderSearchOpen(false);
         setSanggarContactOpen(false);
       }
     };
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setHeaderSearchOpen(false);
         setSanggarContactOpen(false);
         setMobileMenuOpen(false);
       }
@@ -251,17 +247,6 @@ export default function UserCatalogPage({
     () => groupedCatalogByShop.reduce((sum, bk) => sum + bk.products.length, 0),
     [groupedCatalogByShop]
   );
-
-  // Pratinjau cepat untuk panel Search & Browse di Header
-  const quickPreviewProducts = useMemo(() => {
-    return groupedCatalogByShop.flatMap((bk) => bk.products).slice(0, 4);
-  }, [groupedCatalogByShop]);
-
-  const jumpToEtalase = useCallback(() => {
-    setHeaderSearchOpen(false);
-    const el = document.getElementById('katalog');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  }, []);
 
   const handleJsonImport = (e) => {
     const file = e.target.files?.[0];
@@ -425,68 +410,29 @@ export default function UserCatalogPage({
             )}
           </nav>
 
-          {/* Aksi Header: Quick Search/Browse & Daftar Kontak WA 5 Sanggar */}
+          {/* Aksi Header: Kontak WhatsApp Sanggar */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSanggarContactOpen(false);
-                setHeaderSearchOpen((prev) => {
-                  const next = !prev;
-                  if (next) {
-                    setTimeout(() => headerSearchInputRef.current?.focus(), 60);
-                  }
-                  return next;
-                });
-              }}
-              aria-expanded={headerSearchOpen}
-              aria-label="Cari dan filter wastra batik"
-              className={`min-h-[42px] px-3.5 py-2 rounded-md border text-[13.5px] font-medium inline-flex items-center gap-2 transition-colors cursor-pointer ${
-                headerSearchOpen || hasActiveFilters
-                  ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
-                  : 'bg-[#FCFBF8] hover:bg-[#EFEAE0] border-[#1C1917]/20 text-[#1C1917]'
-              }`}
-            >
-              <Search className="w-4 h-4 text-[#7C3219] shrink-0" />
-              <span className="hidden sm:inline">Cari &amp; Filter</span>
-              {hasActiveFilters && (
-                <span className="px-1.5 py-0.5 text-[11px] rounded bg-[#7C3219] text-white tabular-nums">
-                  {totalFilteredCount}
-                </span>
-              )}
-            </button>
-
             <div className="relative">
               <button
                 type="button"
-                onClick={() => {
-                  setHeaderSearchOpen(false);
-                  setSanggarContactOpen((v) => !v);
-                }}
+                onClick={() => setSanggarContactOpen((v) => !v)}
                 aria-expanded={sanggarContactOpen}
-                className={`min-h-[42px] px-3.5 py-2 rounded-md border text-[13.5px] font-medium inline-flex items-center gap-2 transition-colors cursor-pointer ${
-                  sanggarContactOpen
-                    ? 'bg-[#7C3219] text-white border-[#7C3219]'
-                    : 'bg-[#FCFBF8] hover:bg-[#EFEAE0] border-[#1C1917]/20 text-[#1C1917]'
-                }`}
+                className="taste-btn-wa"
               >
-                <MessageCircle
-                  className={`w-4 h-4 shrink-0 ${
-                    sanggarContactOpen ? 'text-white' : 'text-[#7C3219]'
-                  }`}
-                />
+                <MessageCircle className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">Kontak Sanggar</span>
+                <span className="sm:hidden">WhatsApp</span>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
+                  className={`w-4 h-4 transition-transform ${
                     sanggarContactOpen ? 'rotate-180' : ''
                   }`}
                 />
               </button>
 
               {sanggarContactOpen && (
-                <div className="absolute right-0 mt-2 w-[310px] sm:w-[350px] rounded-lg bg-[#FCFBF8] border border-[#1C1917]/15 shadow-[0_18px_40px_rgba(28,25,23,0.18)] p-3 z-50 fade-panel">
+                <div className="absolute right-0 mt-2 w-[310px] sm:w-[350px] rounded-xl bg-[#FCFBF8] border border-[#1C1917]/15 shadow-[0_18px_40px_rgba(28,25,23,0.18)] p-3 z-50 fade-panel">
                   <div className="px-2 pb-2 mb-2 border-b border-[#1C1917]/10">
-                    <span className="text-[12px] font-medium text-[#7C3219] block">
+                    <span className="text-[12px] font-medium text-[#1D6B44] block">
                       WhatsApp Langsung Perajin
                     </span>
                     <p className="text-[13px] text-[#575049]">
@@ -518,7 +464,7 @@ export default function UserCatalogPage({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => setSanggarContactOpen(false)}
-                            className="shrink-0 min-h-[34px] px-3 py-1 rounded-md bg-[#7C3219] hover:bg-[#632612] text-white text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                            className="shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors"
                           >
                             <MessageCircle className="w-3.5 h-3.5" />
                             <span>WA</span>
@@ -536,121 +482,12 @@ export default function UserCatalogPage({
               onClick={() => setMobileMenuOpen((v) => !v)}
               aria-expanded={mobileMenuOpen}
               aria-label={mobileMenuOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
-              className="lg:hidden min-h-[42px] min-w-[42px] inline-flex items-center justify-center rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[#1C1917] cursor-pointer"
+              className="lg:hidden min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-[10px] bg-[#FCFBF8] border border-[#1C1917]/20 text-[#1C1917] cursor-pointer"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
-
-        {/* Panel Quick Search & Browse di bawah Header */}
-        {headerSearchOpen && (
-          <div className="bg-[#FCFBF8] border-t border-[#1C1917]/12 shadow-[0_16px_36px_rgba(28,25,23,0.12)] fade-panel">
-            <div className="taste-wrap py-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
-                <div className="lg:col-span-5 relative">
-                  <Search className="w-4 h-4 text-[#575049] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    ref={headerSearchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && jumpToEtalase()}
-                    placeholder="Cari motif, filosofi, sanggar, atau bahan..."
-                    className="w-full min-h-[42px] pl-10 pr-4 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
-                  />
-                </div>
-
-                <div className="lg:col-span-3">
-                  <select
-                    aria-label="Filter tipe batik"
-                    value={selectedBatikType}
-                    onChange={(e) => setSelectedBatikType(e.target.value)}
-                    className="w-full min-h-[42px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] cursor-pointer"
-                  >
-                    <option value="ALL">Semua Tipe Batik</option>
-                    {batikTypeOptions.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="lg:col-span-2">
-                  <select
-                    aria-label="Filter material atau bahan"
-                    value={selectedMaterial}
-                    onChange={(e) => setSelectedMaterial(e.target.value)}
-                    className="w-full min-h-[42px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] cursor-pointer"
-                  >
-                    <option value="ALL">Semua Bahan</option>
-                    {materialOptions.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="lg:col-span-2 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={jumpToEtalase}
-                    className="taste-btn-primary w-full min-h-[42px] py-2"
-                  >
-                    <span>Lihat ({totalFilteredCount})</span>
-                  </button>
-                  {hasActiveFilters && (
-                    <button
-                      type="button"
-                      onClick={handleResetFilters}
-                      title="Reset semua filter"
-                      aria-label="Reset semua filter"
-                      className="min-h-[42px] min-w-[42px] inline-flex items-center justify-center rounded-md border border-[#1C1917]/20 bg-[#F7F4EE] hover:bg-[#EFEAE0] text-[#575049] cursor-pointer shrink-0"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Pratinjau Hasil Pencarian Langsung */}
-              {quickPreviewProducts.length > 0 && (
-                <div className="pt-2 border-t border-[#1C1917]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 flex-1">
-                    {quickPreviewProducts.map((prod) => (
-                      <button
-                        key={prod.id}
-                        type="button"
-                        onClick={() => {
-                          setHeaderSearchOpen(false);
-                          handleOpenBookProduct(prod.shop.id, prod.id);
-                        }}
-                        className="p-2 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/12 flex items-center gap-2.5 text-left transition-colors cursor-pointer"
-                      >
-                        <ProductArtwork
-                          product={prod}
-                          imageUrl={prod.primaryImageUrl}
-                          size={72}
-                          className="w-10 h-10 rounded-sm shrink-0 border border-[#1C1917]/10"
-                        />
-                        <div className="min-w-0">
-                          <span className="text-[13px] font-medium text-[#1C1917] block truncate">
-                            {prod.name}
-                          </span>
-                          <span className="text-[12px] text-[#7C3219] tabular-nums block truncate">
-                            {formatRupiah(prod.price)} · {prod.shop.name}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {mobileMenuOpen && (
           <nav
@@ -696,14 +533,21 @@ export default function UserCatalogPage({
 
       <main id="konten-utama">
         {/* 2. HERO SECTION */}
-        <section className="bg-[#F7F4EE] pt-10 pb-14 lg:pt-14 lg:pb-20">
-          <div className="taste-wrap grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
+        <section className="relative overflow-hidden bg-[#F7F4EE] pt-10 pb-14 lg:pt-14 lg:pb-20">
+          <img
+            src="/ornaments/mega-mendung-gold.png"
+            alt=""
+            aria-hidden="true"
+            className="hidden md:block pointer-events-none select-none absolute -top-8 -right-14 w-[400px] lg:w-[540px] opacity-[0.24]"
+          />
+          <img
+            src="/ornaments/kawung-sogan.png"
+            alt=""
+            aria-hidden="true"
+            className="hidden md:block pointer-events-none select-none absolute -bottom-10 -left-10 w-60 lg:w-80 opacity-[0.14]"
+          />
+          <div className="taste-wrap relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
             <div className="lg:col-span-6 space-y-5">
-              <p className="text-[13px] font-medium text-[#7C3219] hero-enter-step-1">
-                Kabupaten Trenggalek · {activeShops.length} sanggar aktif · {enrichedProducts.length}{' '}
-                koleksi
-              </p>
-
               <h1 className="font-serif font-normal text-[clamp(2.4rem,4.4vw,3.9rem)] leading-[1.06] tracking-[-0.03em] text-[#1C1917] hero-enter-title">
                 Katalog Wastra Batik Perajin Trenggalek
               </h1>
@@ -798,14 +642,26 @@ export default function UserCatalogPage({
         />
 
         {/* 4. ETALASE KATALOG TERKELOMPOK PER SANGGAR */}
-        <section id="katalog" className="bg-[#F7F4EE] border-t border-[#1C1917]/12 py-16 lg:py-24">
-          <div className="taste-wrap">
+        <section
+          id="katalog"
+          className="relative overflow-hidden bg-[#F7F4EE] border-t border-[#1C1917]/12 py-16 lg:py-24"
+        >
+          <img
+            src="/ornaments/mega-mendung-maroon.png"
+            alt=""
+            aria-hidden="true"
+            className="hidden md:block pointer-events-none select-none absolute -top-6 -right-14 w-[420px] lg:w-[540px] opacity-[0.16]"
+          />
+          <img
+            src="/ornaments/kawung-sogan.png"
+            alt=""
+            aria-hidden="true"
+            className="hidden lg:block pointer-events-none select-none absolute bottom-12 -left-12 w-72 lg:w-96 opacity-[0.10]"
+          />
+          <div className="taste-wrap relative z-10">
             <FadeIn>
               <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 mb-6">
                 <div>
-                  <span className="text-[13px] font-medium text-[#7C3219] block mb-2">
-                    Direktori koleksi aktif · {enrichedProducts.length} produk
-                  </span>
                   <h2 className="font-serif font-normal text-[clamp(1.85rem,3vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
                     Etalase Produk Per Sanggar
                   </h2>
@@ -824,51 +680,65 @@ export default function UserCatalogPage({
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Cari motif, sanggar, bahan..."
-                      className="w-full min-h-[42px] pl-10 pr-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] placeholder:text-[#575049]/75"
+                      className="w-full min-h-[44px] pl-10 pr-3.5 py-2 rounded-[10px] bg-[#FCFBF8] border border-[#1C1917]/20 text-[13.5px] text-[#1C1917] placeholder:text-[#575049]/75"
                     />
                   </div>
 
-                  <select
-                    aria-label="Filter Tipe Batik"
-                    value={selectedBatikType}
-                    onChange={(e) => setSelectedBatikType(e.target.value)}
-                    className={`min-h-[42px] px-3 py-2 rounded-md border text-[13.5px] font-medium cursor-pointer transition-colors ${
-                      selectedBatikType !== 'ALL'
-                        ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
-                        : 'bg-[#FCFBF8] border-[#1C1917]/20 text-[#1C1917]'
-                    }`}
-                  >
-                    <option value="ALL">Tipe Batik: Semua</option>
-                    {batikTypeOptions.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      aria-label="Filter Tipe Batik"
+                      value={selectedBatikType}
+                      onChange={(e) => setSelectedBatikType(e.target.value)}
+                      className={`w-full appearance-none min-h-[44px] pl-3.5 pr-9 py-2 rounded-[10px] border text-[13.5px] font-medium cursor-pointer transition-colors ${
+                        selectedBatikType !== 'ALL'
+                          ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
+                          : 'bg-[#FCFBF8] border-[#1C1917]/20 text-[#1C1917]'
+                      }`}
+                    >
+                      <option value="ALL">Tipe Batik: Semua</option>
+                      {batikTypeOptions.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className={`w-4 h-4 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
+                        selectedBatikType !== 'ALL' ? 'text-[#7C3219]' : 'text-[#575049]'
+                      }`}
+                    />
+                  </div>
 
-                  <select
-                    aria-label="Filter Material atau Bahan"
-                    value={selectedMaterial}
-                    onChange={(e) => setSelectedMaterial(e.target.value)}
-                    className={`min-h-[42px] px-3 py-2 rounded-md border text-[13.5px] font-medium cursor-pointer transition-colors ${
-                      selectedMaterial !== 'ALL'
-                        ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
-                        : 'bg-[#FCFBF8] border-[#1C1917]/20 text-[#1C1917]'
-                    }`}
-                  >
-                    <option value="ALL">Material: Semua</option>
-                    {materialOptions.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      aria-label="Filter Material atau Bahan"
+                      value={selectedMaterial}
+                      onChange={(e) => setSelectedMaterial(e.target.value)}
+                      className={`w-full appearance-none min-h-[44px] pl-3.5 pr-9 py-2 rounded-[10px] border text-[13.5px] font-medium cursor-pointer transition-colors ${
+                        selectedMaterial !== 'ALL'
+                          ? 'bg-[#F3E9E2] border-[#7C3219] text-[#7C3219]'
+                          : 'bg-[#FCFBF8] border-[#1C1917]/20 text-[#1C1917]'
+                      }`}
+                    >
+                      <option value="ALL">Material: Semua</option>
+                      {materialOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className={`w-4 h-4 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
+                        selectedMaterial !== 'ALL' ? 'text-[#7C3219]' : 'text-[#575049]'
+                      }`}
+                    />
+                  </div>
 
                   {hasActiveFilters && (
                     <button
                       type="button"
                       onClick={handleResetFilters}
-                      className="min-h-[42px] px-3 py-2 rounded-md bg-[#FCFBF8] hover:bg-[#EFEAE0] border border-[#1C1917]/20 text-[13px] font-medium text-[#7C3219] inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] px-3.5 py-2 rounded-[10px] bg-[#FCFBF8] hover:bg-[#EFEAE0] border border-[#1C1917]/20 text-[13px] font-medium text-[#7C3219] inline-flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Reset</span>
@@ -913,7 +783,7 @@ export default function UserCatalogPage({
                     <button
                       type="button"
                       onClick={() => setSelectedCategoryId('ALL')}
-                      className={`min-h-[40px] px-3.5 py-2 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                      className={`min-h-[40px] px-3.5 py-2 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                         selectedCategoryId === 'ALL'
                           ? 'bg-[#7C3219] text-white border-[#7C3219]'
                           : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:border-[#7C3219]/40 hover:text-[#1C1917]'
@@ -926,7 +796,7 @@ export default function UserCatalogPage({
                         key={cat.id}
                         type="button"
                         onClick={() => setSelectedCategoryId(cat.id)}
-                        className={`min-h-[40px] px-3.5 py-2 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                        className={`min-h-[40px] px-3.5 py-2 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                           selectedCategoryId === cat.id
                             ? 'bg-[#7C3219] text-white border-[#7C3219]'
                             : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:border-[#7C3219]/40 hover:text-[#1C1917]'
@@ -1019,7 +889,7 @@ export default function UserCatalogPage({
                             href={directShopWaUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="taste-btn-primary"
+                            className="taste-btn-wa"
                           >
                             <MessageCircle className="w-4 h-4 shrink-0" />
                             <span>Hubungi Sanggar</span>
@@ -1054,7 +924,7 @@ export default function UserCatalogPage({
                                   style={{ transitionDelay: `${colIdx * 130}ms` }}
                                   className="fade-row-card"
                                 >
-                                  <article className="h-full rounded-lg border border-[#1C1917]/12 bg-[#FCFBF8] overflow-hidden flex flex-col justify-between taste-card">
+                                  <article className="h-full rounded-xl border border-[#1C1917]/12 bg-[#FCFBF8] overflow-hidden flex flex-col justify-between taste-card">
                                     <div>
                                       <div className="aspect-[4/3] overflow-hidden border-b border-[#1C1917]/10 bg-[#EFEAE0] taste-zoom-frame">
                                         <ProductArtwork
@@ -1117,7 +987,7 @@ export default function UserCatalogPage({
                                         href={prodWaUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="taste-btn-primary w-full"
+                                        className="taste-btn-wa w-full"
                                       >
                                         <MessageCircle className="w-4 h-4 shrink-0" />
                                         <span>Pesan via WhatsApp</span>
@@ -1185,8 +1055,14 @@ export default function UserCatalogPage({
       </main>
 
       {/* 6. FOOTER */}
-      <footer className="bg-[#1B1714] text-[#F5F1E8] py-14 lg:py-20 border-t border-[#1C1917]/15 overflow-hidden">
-        <FadeIn className="taste-wrap">
+      <footer className="relative bg-[#1B1714] text-[#F5F1E8] py-14 lg:py-20 border-t border-[#1C1917]/15 overflow-hidden">
+        <img
+          src="/ornaments/mega-mendung-gold.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute top-4 -right-10 w-[340px] lg:w-[440px] opacity-[0.16]"
+        />
+        <FadeIn className="taste-wrap relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-10 border-b border-white/12">
             <div className="md:col-span-5 space-y-3">
               <span className="font-serif font-normal text-3xl tracking-[-0.02em] text-[#F5F1E8] block">
@@ -1243,7 +1119,7 @@ export default function UserCatalogPage({
                 <button
                   type="button"
                   onClick={() => jsonInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-md border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-[10px] border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <Upload className="w-3.5 h-3.5 text-[#C4A46B]" />
                   <span>Impor JSON DB</span>
@@ -1251,7 +1127,7 @@ export default function UserCatalogPage({
                 <button
                   type="button"
                   onClick={handleJsonExport}
-                  className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-md border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-[10px] border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-[#C4A46B]" />
                   <span>Ekspor JSON DB</span>

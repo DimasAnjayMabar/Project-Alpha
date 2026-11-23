@@ -673,19 +673,28 @@ export default function Batik3DStudio({
     <section
       ref={sectionRef}
       id="mockup-3d"
-      className="py-16 lg:py-24 bg-[#EFEAE0] border-t border-[#1C1917]/12"
+      className="relative overflow-hidden py-16 lg:py-24 bg-[#EFEAE0] border-t border-[#1C1917]/12"
     >
-      <div className="taste-wrap">
+      <img
+        src="/ornaments/mega-mendung-maroon.png"
+        alt=""
+        aria-hidden="true"
+        className="hidden md:block pointer-events-none select-none absolute -top-6 -right-14 w-[380px] lg:w-[500px] opacity-[0.13]"
+      />
+      <img
+        src="/ornaments/kawung-sogan.png"
+        alt=""
+        aria-hidden="true"
+        className="hidden lg:block pointer-events-none select-none absolute -bottom-10 -left-10 w-64 lg:w-80 opacity-[0.11]"
+      />
+      <div className="taste-wrap relative z-10">
         <FadeIn className="max-w-3xl mb-8">
-          <span className="text-[13px] font-medium text-[#7C3219] block mb-2">
-            Pratinjau busana 3D · Pemesanan langsung WhatsApp
-          </span>
           <h2 className="font-serif font-normal text-[clamp(1.85rem,3vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
             Studio Mockup 3D Batik Trenggalek
           </h2>
           <p className="text-[15px] text-[#575049] mt-2 leading-relaxed">
-            Simulasikan produk pada potongan kemeja tailored, kain panjang wiru, atau tas butik,
-            lalu pesan langsung ke WhatsApp sanggar.
+            Simulasikan motif pada kemeja tailored, kain panjang wiru, atau tas butik sebelum
+            memesan ke sanggar.
           </p>
         </FadeIn>
 
@@ -693,10 +702,10 @@ export default function Batik3DStudio({
           <FadeIn
             variant="scale"
             delay={100}
-            className="lg:col-span-7 bg-[#FCFBF8] rounded-lg border border-[#1C1917]/12 p-4 sm:p-5 flex flex-col justify-between gap-4"
+            className="lg:col-span-7 bg-[#FCFBF8] rounded-xl border border-[#1C1917]/12 p-4 sm:p-5 flex flex-col justify-between gap-4"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex flex-wrap gap-1 bg-[#EFEAE0] p-1 rounded-md border border-[#1C1917]/12">
+              <div className="inline-flex flex-wrap gap-1 bg-[#EFEAE0] p-1 rounded-xl border border-[#1C1917]/12">
                 {[
                   { id: 'shirt', label: 'Kemeja Tailored' },
                   { id: 'fabric', label: 'Kain Panjang' },
@@ -706,7 +715,7 @@ export default function Batik3DStudio({
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectModel(tab.id)}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-sm text-[13px] font-medium transition-colors cursor-pointer ${
+                    className={`min-h-[38px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium transition-colors cursor-pointer ${
                       activeModel === tab.id
                         ? 'bg-[#7C3219] text-white'
                         : 'text-[#575049] hover:text-[#1C1917]'
@@ -723,7 +732,7 @@ export default function Batik3DStudio({
                   onClick={() =>
                     setLightMode((m) => (m === 'warm' ? 'day' : m === 'day' ? 'boutique' : 'warm'))
                   }
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#1C1917] text-[13px] font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#1C1917] text-[13px] font-medium cursor-pointer"
                 >
                   <Sun className="w-3.5 h-3.5 text-[#7C3219]" />
                   <span>
@@ -737,7 +746,7 @@ export default function Batik3DStudio({
                 <button
                   type="button"
                   onClick={() => setAutoRotate((v) => !v)}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-md border text-[13px] font-medium cursor-pointer transition-colors ${
+                  className={`min-h-[40px] px-3 py-1.5 rounded-[10px] border text-[13px] font-medium cursor-pointer transition-colors ${
                     autoRotate
                       ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
                       : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
@@ -752,7 +761,7 @@ export default function Batik3DStudio({
                     sceneStateRef.current.targetRotX = 0.08;
                     setZoom(1.0);
                   }}
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-md bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#575049] hover:text-[#1C1917] text-[13px] font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#575049] hover:text-[#1C1917] text-[13px] font-medium cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Reset</span>
@@ -766,7 +775,7 @@ export default function Batik3DStudio({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerUp}
-              className={`relative rounded-md overflow-hidden border border-[#1C1917]/12 h-[380px] sm:h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
+              className={`relative rounded-xl overflow-hidden border border-[#1C1917]/12 h-[380px] sm:h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
                 lightMode === 'warm'
                   ? 'bg-gradient-to-b from-[#EDE5D7] via-[#E3D9C7] to-[#D4C6B1]'
                   : lightMode === 'day'
@@ -800,7 +809,7 @@ export default function Batik3DStudio({
 
           <FadeIn
             delay={200}
-            className="lg:col-span-5 bg-[#FCFBF8] rounded-lg border border-[#1C1917]/12 p-5 sm:p-6 flex flex-col justify-between gap-5"
+            className="lg:col-span-5 bg-[#FCFBF8] rounded-xl border border-[#1C1917]/12 p-5 sm:p-6 flex flex-col justify-between gap-5"
           >
             <div className="space-y-5">
               <div>
@@ -812,7 +821,7 @@ export default function Batik3DStudio({
                   <button
                     type="button"
                     onClick={() => setStudioShopFilter('ALL')}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                    className={`min-h-[38px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                       studioShopFilter === 'ALL'
                         ? 'bg-[#7C3219] text-white border-[#7C3219]'
                         : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
@@ -825,7 +834,7 @@ export default function Batik3DStudio({
                       key={s.id}
                       type="button"
                       onClick={() => setStudioShopFilter(s.id)}
-                      className={`min-h-[38px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                      className={`min-h-[38px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                         studioShopFilter === s.id
                           ? 'bg-[#7C3219] text-white border-[#7C3219]'
                           : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
@@ -844,7 +853,7 @@ export default function Batik3DStudio({
                         key={prod.id}
                         type="button"
                         onClick={() => onSelectProduct(prod.id)}
-                        className={`p-2 rounded-md border text-left transition-colors flex items-center gap-2.5 cursor-pointer ${
+                        className={`p-2 rounded-[10px] border text-left transition-colors flex items-center gap-2.5 cursor-pointer ${
                           isSelected
                             ? 'border-[#7C3219] bg-[#F7F4EE] ring-1 ring-[#7C3219]/25'
                             : 'border-[#1C1917]/12 bg-[#FCFBF8] hover:border-[#1C1917]/30'
@@ -919,7 +928,7 @@ export default function Batik3DStudio({
                 href={waHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="taste-btn-primary w-full"
+                className="taste-btn-wa w-full"
               >
                 <MessageCircle className="w-4 h-4 shrink-0" />
                 <span>Pesan Produk Ini via WhatsApp</span>

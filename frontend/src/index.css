@@ -28,6 +28,8 @@
   --action: #7C3219;
   --action-hover: #632612;
   --action-soft: #F3E9E2;
+  --wa: #1D6B44;
+  --wa-hover: #165233;
   --gold: #B6842C;
   --gold-soft: #F6EEDB;
   --indigo: #21415C;
@@ -102,17 +104,18 @@ body {
   }
 }
 
-/* Unified Button System (44px min-height) */
+/* Unified Button System (44px min-height, rounded-[10px]) */
 .taste-btn-primary,
 .taste-btn-secondary,
-.taste-btn-dark {
+.taste-btn-dark,
+.taste-btn-wa {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 44px;
   padding: 10px 18px;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.2;
@@ -129,6 +132,12 @@ body {
   background-color: var(--action);
   color: #FFFFFF;
   border: 1px solid var(--action);
+}
+
+.taste-btn-wa {
+  background-color: var(--wa);
+  color: #FFFFFF;
+  border: 1px solid var(--wa);
 }
 
 .taste-btn-secondary {
@@ -151,6 +160,13 @@ body {
     transition-duration: var(--m-in), var(--m-in), var(--m-in), var(--m-press);
   }
 
+  .taste-btn-wa:hover:not(:disabled) {
+    background-color: var(--wa-hover);
+    border-color: var(--wa-hover);
+    transform: translateY(-1px);
+    transition-duration: var(--m-in), var(--m-in), var(--m-in), var(--m-press);
+  }
+
   .taste-btn-secondary:hover:not(:disabled) {
     background-color: var(--surface);
     border-color: rgba(28, 25, 23, 0.38);
@@ -166,12 +182,14 @@ body {
 }
 
 .taste-btn-primary:active:not(:disabled),
+.taste-btn-wa:active:not(:disabled),
 .taste-btn-secondary:active:not(:disabled),
 .taste-btn-dark:active:not(:disabled) {
   transform: translateY(1px) scale(0.985);
 }
 
 .taste-btn-primary:disabled,
+.taste-btn-wa:disabled,
 .taste-btn-secondary:disabled,
 .taste-btn-dark:disabled {
   opacity: 0.45;
@@ -413,6 +431,7 @@ body {
   .taste-zoom-frame img,
   .taste-zoom-frame canvas,
   .taste-btn-primary,
+  .taste-btn-wa,
   .taste-btn-secondary,
   .taste-btn-dark,
   .m-arrow {

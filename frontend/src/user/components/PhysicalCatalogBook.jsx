@@ -272,8 +272,20 @@ export default function PhysicalCatalogBookSection({
       <div className="absolute inset-y-0 left-0 w-6 bg-black/35 border-r border-[#C4A46B]/20 pointer-events-none" />
       <div className="absolute inset-y-3 right-0 w-2.5 bg-[repeating-linear-gradient(to_left,#E6DEC8_0px,#FAF8F3_1px,#D4C8B2_2px)] rounded-r-sm opacity-95 pointer-events-none" />
 
-      <div className="relative ml-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-5 sm:p-7 flex flex-col justify-between">
-        <div className="text-center space-y-2">
+      <div className="relative ml-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-5 sm:p-7 flex flex-col justify-between overflow-hidden">
+        <img
+          src="/ornaments/ukiran-corner-gold.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute top-2 left-2 w-14 sm:w-16 -scale-x-100 opacity-70"
+        />
+        <img
+          src="/ornaments/ukiran-corner-gold.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute top-2 right-2 w-14 sm:w-16 opacity-70"
+        />
+        <div className="relative z-10 text-center space-y-2">
           <span className="inline-block text-[13px] font-medium text-[#C4A46B]">
             Katalog Resmi Sanggar · Kabupaten Trenggalek
           </span>
@@ -307,7 +319,7 @@ export default function PhysicalCatalogBookSection({
             {products.length} koleksi aktif
             {products.length > 0 && ` · Mulai ${formatRupiah(minShopPrice)}`}
           </p>
-          <div className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-md bg-[#FCFBF8] group-hover:bg-[#EFEAE0] text-[#1C1917] text-[14px] font-medium transition-colors">
+          <div className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-[10px] bg-[#FCFBF8] group-hover:bg-[#EFEAE0] text-[#1C1917] text-[14px] font-medium transition-colors">
             <BookOpen className="w-4 h-4 text-[#7C3219]" />
             <span>Buka Buku Katalog</span>
           </div>
@@ -333,8 +345,20 @@ export default function PhysicalCatalogBookSection({
         <div className="absolute inset-y-0 right-0 w-6 bg-black/35 border-l border-[#C4A46B]/20 pointer-events-none" />
         <div className="absolute inset-y-3 left-0 w-2.5 bg-[repeating-linear-gradient(to_right,#E6DEC8_0px,#FAF8F3_1px,#D4C8B2_2px)] rounded-l-sm opacity-95 pointer-events-none" />
 
-        <div className="relative mr-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-5 sm:p-7 text-center flex flex-col justify-between">
-          <div className="space-y-1.5">
+        <div className="relative mr-4 flex-1 border border-[#C4A46B]/35 rounded-sm p-5 sm:p-7 text-center flex flex-col justify-between overflow-hidden">
+          <img
+            src="/ornaments/ukiran-corner-gold.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none select-none absolute top-2 left-2 w-14 sm:w-16 -scale-x-100 opacity-70"
+          />
+          <img
+            src="/ornaments/ukiran-corner-gold.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none select-none absolute top-2 right-2 w-14 sm:w-16 opacity-70"
+          />
+          <div className="relative z-10 space-y-1.5">
             <span className="inline-block text-[13px] font-medium text-[#C4A46B]">
               Sampul Penutup Katalog
             </span>
@@ -368,7 +392,7 @@ export default function PhysicalCatalogBookSection({
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="taste-btn-primary"
+                className="taste-btn-wa"
               >
                 <MessageCircle className="w-4 h-4 shrink-0" />
                 <span className="tabular-nums">Pesan via WhatsApp (+{shopWa})</span>
@@ -379,7 +403,7 @@ export default function PhysicalCatalogBookSection({
                   href={shop.online_shop}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[14px] font-medium transition-colors"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-[10px] border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[14px] font-medium transition-colors"
                 >
                   <Store className="w-4 h-4 text-[#C4A46B]" />
                   <span>Toko Online</span>
@@ -391,7 +415,7 @@ export default function PhysicalCatalogBookSection({
                   href={shop.instagram}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[14px] font-medium transition-colors"
+                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-[10px] border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[14px] font-medium transition-colors"
                 >
                   <InstagramIcon className="w-4 h-4 text-[#C4A46B]" />
                   <span>Instagram</span>
@@ -405,7 +429,7 @@ export default function PhysicalCatalogBookSection({
               type="button"
               disabled={!interactive}
               onClick={() => interactive && triggerFlip(backCoverPage - 1)}
-              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-md border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[13px] font-medium cursor-pointer"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-[10px] border border-white/20 text-[#F5F1E8] hover:bg-white/10 text-[13px] font-medium cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Halaman Terakhir</span>
@@ -414,7 +438,7 @@ export default function PhysicalCatalogBookSection({
               type="button"
               disabled={!interactive}
               onClick={() => interactive && triggerFlip(0)}
-              className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-md bg-[#FCFBF8] hover:bg-[#EFEAE0] text-[#1C1917] text-[13px] font-medium cursor-pointer"
+              className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[10px] bg-[#FCFBF8] hover:bg-[#EFEAE0] text-[#1C1917] text-[13px] font-medium cursor-pointer"
             >
               Tutup ke Sampul Depan
             </button>
@@ -545,7 +569,7 @@ export default function PhysicalCatalogBookSection({
             href={productWaHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="taste-btn-primary w-full"
+            className="taste-btn-wa w-full"
           >
             <MessageCircle className="w-4 h-4 shrink-0" />
             <span>Pesan via WA</span>
@@ -658,7 +682,7 @@ export default function PhysicalCatalogBookSection({
                           setWaInput(shopWa);
                           setEditingWa(true);
                         }}
-                        className="inline-flex items-center gap-1 min-h-[38px] px-3 py-1.5 rounded-md bg-[#FCFBF8] border border-[#1C1917]/20 text-[13px] font-medium text-[#575049] hover:text-[#1C1917] cursor-pointer"
+                        className="inline-flex items-center gap-1 min-h-[38px] px-3 py-1.5 rounded-[10px] bg-[#FCFBF8] border border-[#1C1917]/20 text-[13px] font-medium text-[#575049] hover:text-[#1C1917] cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         <span>Ubah WA</span>
@@ -671,7 +695,7 @@ export default function PhysicalCatalogBookSection({
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center min-h-[38px] px-3.5 py-1.5 rounded-md bg-[#7C3219] hover:bg-[#632612] text-white text-[13px] font-medium transition-colors"
+                      className="inline-flex items-center justify-center min-h-[38px] px-3.5 py-1.5 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[13px] font-medium transition-colors"
                     >
                       Chat WA
                     </a>
@@ -819,8 +843,14 @@ export default function PhysicalCatalogBookSection({
     );
 
     return (
-      <div className="h-full p-6 sm:p-8 lg:pl-11 flex flex-col justify-between space-y-4 paper-surface">
-        <div className="space-y-4">
+      <div className="relative h-full p-6 sm:p-8 lg:pl-11 flex flex-col justify-between space-y-4 paper-surface overflow-hidden">
+        <img
+          src="/ornaments/kawung-sogan.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute bottom-8 -right-4 w-40 opacity-[0.08]"
+        />
+        <div className="relative z-10 space-y-4">
           <div className="flex items-center justify-between text-[13px] font-serif italic text-[#7C3219] border-b border-[#1C1917]/12 pb-2">
             <span>Spesifikasi &amp; Pemesanan</span>
             <span className="tabular-nums">Halaman {rightPageNum}</span>
@@ -866,7 +896,7 @@ export default function PhysicalCatalogBookSection({
               href={detailWaHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="taste-btn-primary w-full"
+              className="taste-btn-wa w-full"
             >
               <MessageCircle className="w-4 h-4 shrink-0" />
               <span>Pesan Produk Ini via WhatsApp</span>
@@ -973,8 +1003,20 @@ export default function PhysicalCatalogBookSection({
   return (
     <section
       id="buku-katalog"
-      className="py-12 lg:py-16 bg-[#EFEAE0] border-t border-[#1C1917]/12 overflow-hidden"
+      className="relative py-12 lg:py-16 bg-[#EFEAE0] border-t border-[#1C1917]/12 overflow-hidden"
     >
+      <img
+        src="/ornaments/mega-mendung-gold.png"
+        alt=""
+        aria-hidden="true"
+        className="hidden lg:block pointer-events-none select-none absolute top-28 -right-16 w-[380px] xl:w-[480px] opacity-[0.16]"
+      />
+      <img
+        src="/ornaments/kawung-sogan.png"
+        alt=""
+        aria-hidden="true"
+        className="hidden lg:block pointer-events-none select-none absolute bottom-6 -left-12 w-72 xl:w-96 opacity-[0.11]"
+      />
       <style>{`
         .paper-surface {
           background-color: #FAF8F3;
@@ -995,23 +1037,17 @@ export default function PhysicalCatalogBookSection({
         }
       `}</style>
 
-      <div className="taste-wrap">
+      <div className="taste-wrap relative z-10">
         <FadeIn>
-          {/* Judul Section — Dibersihkan dari tombol redundan */}
+          {/* Judul Section */}
           <div className="mb-4">
-            <span className="text-[13px] font-medium text-[#7C3219] block mb-1">
-              Buku katalog per sanggar · Pemesanan langsung WhatsApp
-            </span>
             <h2 className="font-serif font-normal text-[clamp(1.75rem,2.8vw,2.45rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
               Buku Katalog — {shop.name}
             </h2>
           </div>
 
-          {/* Pilihan Buku Per Sanggar UMKM — Warna Aktif Sogan & Nama Tidak Terpotong */}
+          {/* Pilihan Buku Per Sanggar UMKM */}
           <div className="mb-4">
-            <span className="text-[13px] font-medium text-[#575049] block mb-2">
-              Pilih sanggar UMKM ({shopBooks.length} sanggar aktif)
-            </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               {shopBooks.map((bk, idx) => {
                 const isSelectedBook = bk.shop.id === shop.id;
@@ -1020,7 +1056,7 @@ export default function PhysicalCatalogBookSection({
                     key={bk.shop.id}
                     type="button"
                     onClick={() => handleSwitchShopBook(bk.shop.id)}
-                    className={`min-h-[56px] px-3 py-2 rounded-md border text-left transition-colors flex items-start gap-2.5 cursor-pointer ${
+                    className={`min-h-[56px] px-3 py-2 rounded-[10px] border text-left transition-colors flex items-start gap-2.5 cursor-pointer ${
                       isSelectedBook
                         ? 'bg-[#7C3219] text-white border-[#7C3219] shadow-sm'
                         : 'bg-[#FCFBF8] hover:bg-white text-[#1C1917] border-[#1C1917]/15 hover:border-[#7C3219]/40'
@@ -1060,7 +1096,7 @@ export default function PhysicalCatalogBookSection({
               type="button"
               disabled={Boolean(flipState)}
               onClick={() => triggerFlip(0)}
-              className={`min-h-[36px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+              className={`min-h-[36px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                 safePage === 0
                   ? 'bg-[#7C3219] text-white border-[#7C3219]'
                   : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
@@ -1078,7 +1114,7 @@ export default function PhysicalCatalogBookSection({
                   type="button"
                   disabled={Boolean(flipState)}
                   onClick={() => triggerFlip(pageNum)}
-                  className={`min-h-[36px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+                  className={`min-h-[36px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                     isActive
                       ? 'bg-[#7C3219] text-white border-[#7C3219]'
                       : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
@@ -1093,7 +1129,7 @@ export default function PhysicalCatalogBookSection({
               type="button"
               disabled={Boolean(flipState)}
               onClick={() => triggerFlip(backCoverPage)}
-              className={`min-h-[36px] px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors cursor-pointer ${
+              className={`min-h-[36px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium border transition-colors cursor-pointer ${
                 safePage === backCoverPage
                   ? 'bg-[#7C3219] text-white border-[#7C3219]'
                   : 'bg-[#FCFBF8] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:border-[#7C3219]/40'
