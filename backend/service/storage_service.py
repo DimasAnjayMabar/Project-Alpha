@@ -1,28 +1,20 @@
 # backend/service/storage_service.py
 import logging
-import os
-from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
 import requests
-from dotenv import load_dotenv
 
 from service.exceptions import ServiceException, ValidationError
+from url_controller import (
+    build_backend_url,
+    build_storage_url,
+    get_storage_headers,
+)
 
 # =========================================================================
-# KONFIGURASI ENV (project_alpha/.env)
+# KONFIGURASI MEDIA & TIMEOUT
 # =========================================================================
-
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(ROOT_DIR / ".env")
-
-STORAGE_BASE_URL = os.getenv("STORAGE_BASE_URL", "http://localhost:3003").rstrip("/")
-BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:3002").rstrip("/")
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
-
-# Harus sama dengan header di storage/controller/storage_controller.py
-INTERNAL_API_KEY_HEADER = "X-Internal-Key"
 
 # Prefix route proxy di backend/controller/storage_controller.py
 MEDIA_PUBLIC_PREFIX = "/storage/files"
@@ -41,17 +33,10 @@ IncomingFile = Tuple[str, Optional[str], bytes]
 # HELPER INTERNAL & URL BUILDER
 # =========================================================================
 
-def _internal_headers() -> dict:
-    headers = {}
-    if INTERNAL_API_KEY:
-        headers[INTERNAL_API_KEY_HEADER] = INTERNAL_API_KEY
-    return headers
-
-
 def build_public_media_url(relative_path: Optional[str]) -> Optional[str]:
     """
     Ubah path relatif DB (uploads/products/... atau uploads/shop_profile/...)
-    menjadi URL publik lewat proxy backend 3002.
+    menjadi URL publik lewat proxy backend sesuai BACKEND_PUBLIC_MODE di url_controller.
     Jika sudah berupa URL penuh http(s):// (misalnya dari seed lama), kembalikan apa adanya.
     """
     if not relative_path:
@@ -65,7 +50,7 @@ def build_public_media_url(relative_path: Optional[str]) -> Optional[str]:
     cleaned = raw.lstrip("/").replace("\\", "/")
     if not cleaned:
         return None
-    return f"{BACKEND_BASE_URL}{MEDIA_PUBLIC_PREFIX}/{quote(cleaned, safe='/')}"
+    return build_backend_url(f"{MEDIA_PUBLIC_PREFIX}/{quote(cleaned, safe='/')}")
 
 
 def _attach_public_url(file_meta: dict) -> dict:
@@ -111,9 +96,13 @@ def _sanitize_relative_path(relative_path: str) -> str:
 # =========================================================================
 
 def check_storage_health() -> dict:
-    url = f"{STORAGE_BASE_URL}/storage/health"
+    url = build_storage_url("/storage/health")
     try:
-        resp = requests.get(url, timeout=STORAGE_DEFAULT_TIMEOUT)
+        resp = requests.get(
+            url,
+            headers=get_storage_headers(),
+            timeout=STORAGE_DEFAULT_TIMEOUT,
+        )
         return _handle_storage_response(resp)
     except requests.exceptions.Timeout:
         raise ServiceException("Storage server timeout saat cek health.", status_code=504)
@@ -133,7 +122,7 @@ def upload_display_images(
     if not incoming_files:
         raise ValidationError("Minimal 1 gambar display harus dikirim.")
 
-    url = f"{STORAGE_BASE_URL}/storage/upload/display"
+    url = build_storage_url("/storage/upload/display")
     files_payload = []
     for idx, (filename, content_type, raw_bytes) in enumerate(incoming_files):
         if not raw_bytes:
@@ -154,7 +143,7 @@ def upload_display_images(
     try:
         resp = requests.post(
             url,
-            headers=_internal_headers(),
+            headers=get_storage_headers(),
             files=files_payload,
             data=form_data,
             timeout=STORAGE_UPLOAD_TIMEOUT,
@@ -189,7 +178,7 @@ def upload_mockup_image(
     if not raw_bytes:
         raise ValidationError(f"File mockup '{filename or 'mockup'}' kosong.")
 
-    url = f"{STORAGE_BASE_URL}/storage/upload/mockup"
+    url = build_storage_url("/storage/upload/mockup")
     files_payload = {
         "file": (
             filename or "mockup.bin",
@@ -204,7 +193,7 @@ def upload_mockup_image(
     try:
         resp = requests.post(
             url,
-            headers=_internal_headers(),
+            headers=get_storage_headers(),
             files=files_payload,
             data=form_data,
             timeout=STORAGE_UPLOAD_TIMEOUT,
@@ -234,7 +223,7 @@ def upload_shop_profile_image(
     if not raw_bytes:
         raise ValidationError(f"File logo toko '{filename or 'shop-profile'}' kosong.")
 
-    url = f"{STORAGE_BASE_URL}/storage/upload/shop-profile"
+    url = build_storage_url("/storage/upload/shop-profile")
     files_payload = {
         "file": (
             filename or "shop-profile.bin",
@@ -249,7 +238,7 @@ def upload_shop_profile_image(
     try:
         resp = requests.post(
             url,
-            headers=_internal_headers(),
+            headers=get_storage_headers(),
             files=files_payload,
             data=form_data,
             timeout=STORAGE_UPLOAD_TIMEOUT,
@@ -280,11 +269,11 @@ def delete_storage_files(
             return {"deleted": [], "not_found": []}
         raise ValidationError("Daftar path file yang akan dihapus tidak boleh kosong.")
 
-    url = f"{STORAGE_BASE_URL}/storage/files/delete"
+    url = build_storage_url("/storage/files/delete")
     try:
         resp = requests.post(
             url,
-            headers=_internal_headers(),
+            headers=get_storage_headers(),
             json={"paths": cleaned_paths},
             timeout=STORAGE_DEFAULT_TIMEOUT,
         )
@@ -318,12 +307,12 @@ def fetch_storage_file_stream(
     oleh backend/controller/storage_controller.py ke browser.
     """
     cleaned = _sanitize_relative_path(file_path)
-    url = f"{STORAGE_BASE_URL}/storage/files/{quote(cleaned, safe='/')}"
+    url = build_storage_url(f"/storage/files/{quote(cleaned, safe='/')}")
 
     try:
         resp = requests.get(
             url,
-            headers=_internal_headers(),
+            headers=get_storage_headers(),
             stream=True,
             timeout=STORAGE_DEFAULT_TIMEOUT,
         )

@@ -8,7 +8,8 @@ export function formatRupiah(amount) {
 }
 
 export function buildWhatsAppUrl(phone, message) {
-  const digits = String(phone || '6281234567801').replace(/\D/g, '');
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
   const normalized = digits.startsWith('0')
     ? `62${digits.slice(1)}`
     : digits.startsWith('62')
@@ -66,7 +67,9 @@ export function formatAttributeValue(attrSchema, rawVal) {
 }
 
 export function resolveVisualTheme(productName = '', shopId = '') {
-  const lower = productName.toLowerCase();
+  const lower = String(productName || '').toLowerCase();
+  const shopKey = String(shopId || '');
+
   let pattern = 'cengkeh';
   if (lower.includes('turonggo')) pattern = 'turonggo';
   else if (lower.includes('cengkeh')) pattern = 'cengkeh';
@@ -76,7 +79,7 @@ export function resolveVisualTheme(productName = '', shopId = '') {
   else if (lower.includes('batu')) pattern = 'batu_tumpuk';
   else if (lower.includes('kopi')) pattern = 'kopi';
 
-  if (shopId.endsWith('02') || lower.includes('biru') || lower.includes('indigo')) {
+  if (shopKey.endsWith('02') || lower.includes('biru') || lower.includes('indigo')) {
     return {
       warna_utama: '#132D46',
       warna_sekunder: '#2E6F9E',
@@ -108,7 +111,7 @@ export function resolveVisualTheme(productName = '', shopId = '') {
       pola_jenis: pattern,
     };
   }
-  if (shopId.endsWith('05') || lower.includes('terakota')) {
+  if (shopKey.endsWith('05') || lower.includes('terakota')) {
     return {
       warna_utama: '#341914',
       warna_sekunder: '#B84A27',

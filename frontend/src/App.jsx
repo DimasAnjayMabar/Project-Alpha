@@ -1,10 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import UserCatalogPage from './user/UserCatalogPage';
-import {
-  DB_STORAGE_KEY,
-  loadSharedDatabase,
-  saveSharedDatabase,
-} from './seller/utils/sellerService';
 
 const SellerPortalPage = lazy(() => import('./seller/SellerPortalPage'));
 const SellerRegisterView = lazy(() => import('./seller/components/SellerRegisterView'));
@@ -17,7 +12,6 @@ function resolveRouteFromPath(pathname) {
 }
 
 export default function App() {
-  const [db, setDb] = useState(() => loadSharedDatabase());
   const [activeRoute, setActiveRoute] = useState(() =>
     resolveRouteFromPath(window.location.pathname)
   );
@@ -31,11 +25,6 @@ export default function App() {
     }
   }, []);
 
-  // Simpan setiap perubahan database lokal ke localStorage
-  useEffect(() => {
-    saveSharedDatabase(db);
-  }, [db]);
-
   // Dengarkan tombol Back / Forward browser
   useEffect(() => {
     const handlePopState = () => {
@@ -44,17 +33,6 @@ export default function App() {
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  // Sinkronisasi data otomatis antar-tab (/seller <-> /user)
-  useEffect(() => {
-    const handleStorageSync = (e) => {
-      if (e.key === DB_STORAGE_KEY) {
-        setDb(loadSharedDatabase());
-      }
-    };
-    window.addEventListener('storage', handleStorageSync);
-    return () => window.removeEventListener('storage', handleStorageSync);
   }, []);
 
   const navigateToUserCatalog = (shopIdToFocus = null) => {
@@ -97,11 +75,7 @@ export default function App() {
           </div>
         }
       >
-        <SellerPortalPage
-          db={db}
-          setDb={setDb}
-          onOpenUserCatalog={navigateToUserCatalog}
-        />
+        <SellerPortalPage onOpenUserCatalog={navigateToUserCatalog} />
       </Suspense>
     );
   }
@@ -109,8 +83,6 @@ export default function App() {
   return (
     <UserCatalogPage
       key={focusShopId || 'default'}
-      externalDb={db}
-      onExternalDbChange={setDb}
       initialFocusShopId={focusShopId}
       onOpenSellerPortal={navigateToSellerPortal}
     />

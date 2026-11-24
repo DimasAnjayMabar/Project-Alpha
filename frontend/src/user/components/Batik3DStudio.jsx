@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+// frontend/src/user/components/Batik3DStudio.jsx
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
 import {
   MessageCircle,
@@ -7,9 +8,16 @@ import {
   ZoomIn,
   ZoomOut,
   ArrowRight,
+  Layers,
+  Loader2,
+  Grid2x2,
 } from 'lucide-react';
 import FadeIn from '../../components/FadeIn';
 import ProductArtwork from './ProductArtwork';
+import {
+  resolveBackendMediaUrl,
+  fetchBackendMediaBlobUrl,
+} from '../../utils/url_controller';
 import { drawProductMotifToCanvas } from '../utils/batikCanvas';
 import { formatRupiah, buildProductOrderWaUrl } from '../utils/helpers';
 import {
@@ -23,6 +31,57 @@ import {
   disposeGroupChildren,
 } from '../utils/threeGeometries';
 
+const BASE_MODEL_REPEAT = {
+  shirt: 1.35,
+  fabric: 1.05,
+  tote: 1.25,
+};
+
+function applyTextureMapping(texture, { model, scale, aspect, seamlessMirror }) {
+  if (!texture) return;
+
+  const safeAspect = Math.max(0.35, Math.min(2.8, Number(aspect) || 1));
+  const sqrtAspect = Math.sqrt(safeAspect);
+  const base = (BASE_MODEL_REPEAT[model] || 1.25) * (Number(scale) || 1.0);
+
+  const wrapMode = seamlessMirror
+    ? THREE.MirroredRepeatWrapping
+    : THREE.RepeatWrapping;
+
+  texture.wrapS = wrapMode;
+  texture.wrapT = wrapMode;
+  texture.repeat.set(base / sqrtAspect, base * sqrtAspect);
+  texture.needsUpdate = true;
+}
+
+function resolveProductMockupUrl(product) {
+  if (!product) return '';
+  const raw =
+    product.mockupImageUrl ||
+    product.mockupImage?.public_url ||
+    product.mockup_image?.public_url ||
+    product.mockupImage?.image_url ||
+    product.mockup_image?.image_url ||
+    '';
+  return resolveBackendMediaUrl(raw);
+}
+
+function resolveProductDisplayUrl(product) {
+  if (!product) return '';
+  const raw =
+    product.primaryImageUrl ||
+    product.displayImages?.[0]?.public_url ||
+    product.displayImages?.[0]?.image_url ||
+    '';
+  return resolveBackendMediaUrl(raw);
+}
+
+function loadThreeTexture(loader, url) {
+  return new Promise((resolve, reject) => {
+    loader.load(url, resolve, undefined, reject);
+  });
+}
+
 export default function Batik3DStudio({
   enrichedProducts,
   activeShops,
@@ -34,6 +93,9 @@ export default function Batik3DStudio({
   getEffectiveWa,
 }) {
   const [zoom, setZoom] = useState(1.0);
+  const [textureScale, setTextureScale] = useState(1.0);
+  const [seamlessMirror, setSeamlessMirror] = useState(true);
+  const [textureSource, setTextureSource] = useState('canvas'); // 'loading' | 'mockup' | 'display' | 'canvas'
   const [autoRotate, setAutoRotate] = useState(() => {
     if (typeof window === 'undefined') return true;
     return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -56,6 +118,7 @@ export default function Batik3DStudio({
     keyLight: null,
     fillLight: null,
     rimLight: null,
+    textureAspect: 1.0,
     targetRotY: 0.28,
     targetRotX: 0.08,
     currentRotY: 0.28,
@@ -77,6 +140,49 @@ export default function Batik3DStudio({
     return enrichedProducts.filter((p) => p.shop_id === studioShopFilter);
   }, [enrichedProducts, studioShopFilter]);
 
+  const mappingConfigRef = useRef({
+    model: activeModel,
+    scale: textureScale,
+    seamlessMirror,
+  });
+
+  useEffect(() => {
+    mappingConfigRef.current = {
+      model: activeModel,
+      scale: textureScale,
+      seamlessMirror,
+    };
+  }, [activeModel, textureScale, seamlessMirror]);
+
+  const swapMaterialTexture = useCallback((nextTexture, aspectRatio = 1.0) => {
+    const state = sceneStateRef.current;
+    if (!state.batikMaterial) {
+      nextTexture.dispose();
+      return;
+    }
+
+    const maxAniso = state.renderer?.capabilities?.getMaxAnisotropy?.() || 8;
+    nextTexture.colorSpace = THREE.SRGBColorSpace;
+    nextTexture.anisotropy = Math.min(8, maxAniso);
+
+    state.textureAspect = aspectRatio;
+    applyTextureMapping(nextTexture, {
+      ...mappingConfigRef.current,
+      aspect: aspectRatio,
+    });
+
+    const oldTexture = state.batikMaterial.map;
+    state.batikMaterial.map = nextTexture;
+    state.batikMaterial.needsUpdate = true;
+    if (oldTexture && oldTexture !== nextTexture) {
+      oldTexture.dispose();
+    }
+
+    if (state.renderer && state.scene && state.camera) {
+      state.renderer.render(state.scene, state.camera);
+    }
+  }, []);
+
   useEffect(() => {
     sceneStateRef.current.autoRotate = autoRotate;
   }, [autoRotate]);
@@ -96,6 +202,7 @@ export default function Batik3DStudio({
     return () => el.removeEventListener('wheel', onWheelNative);
   }, []);
 
+  // Inisialisasi WebGLRenderer, Scene, Lighting & Render Loop
   useEffect(() => {
     const container = mountRef.current;
     const sectionEl = sectionRef.current;
@@ -308,6 +415,7 @@ export default function Batik3DStudio({
     };
   }, []);
 
+  // Pencahayaan studio
   useEffect(() => {
     const state = sceneStateRef.current;
     if (!state.ambientLight || !state.keyLight || !state.fillLight || !state.rimLight) return;
@@ -335,27 +443,113 @@ export default function Batik3DStudio({
     }
   }, [lightMode]);
 
+  // Muat tekstur asli lewat url_controller (Prioritas: mockup_image -> display_images[0] -> kanvas prosedural)
   useEffect(() => {
     const state = sceneStateRef.current;
     if (!state.batikMaterial || !activeProduct) return;
 
-    const texCanvas = document.createElement('canvas');
-    drawProductMotifToCanvas(texCanvas, activeProduct, 1024);
+    let cancelled = false;
+    const abortController = new AbortController();
 
-    const newTexture = new THREE.CanvasTexture(texCanvas);
-    newTexture.colorSpace = THREE.SRGBColorSpace;
-    newTexture.wrapS = THREE.RepeatWrapping;
-    newTexture.wrapT = THREE.RepeatWrapping;
-    newTexture.anisotropy = 8;
-    newTexture.repeat.set(activeModel === 'fabric' ? 1.35 : 1.7, activeModel === 'fabric' ? 1.5 : 1.7);
-    newTexture.needsUpdate = true;
+    // 1. Pasang kanvas prosedural seketika sebagai placeholder agar model 3D tidak pernah blank
+    const fallbackCanvas = document.createElement('canvas');
+    drawProductMotifToCanvas(fallbackCanvas, activeProduct, 1024);
+    const canvasTexture = new THREE.CanvasTexture(fallbackCanvas);
+    swapMaterialTexture(canvasTexture, 1.0);
 
-    const oldTexture = state.batikMaterial.map;
-    state.batikMaterial.map = newTexture;
+    // 2. Susun kandidat gambar ternormalisasi sesuai BACKEND_MODE di url_controller
+    const mockupUrl = resolveProductMockupUrl(activeProduct);
+    const displayUrl = resolveProductDisplayUrl(activeProduct);
+
+    const candidates = [];
+    if (mockupUrl) candidates.push({ url: mockupUrl, source: 'mockup' });
+    if (displayUrl && displayUrl !== mockupUrl) {
+      candidates.push({ url: displayUrl, source: 'display' });
+    }
+
+    if (candidates.length === 0) {
+      setTextureSource('canvas');
+      return () => {
+        cancelled = true;
+        abortController.abort();
+      };
+    }
+
+    setTextureSource('loading');
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+
+    const loadCandidates = async () => {
+      for (const { url, source } of candidates) {
+        if (cancelled) return;
+        let revoke = null;
+        try {
+          // Tarik via backendFetch -> Blob URL agar membawa header ngrok-skip-browser-warning
+          const media = await fetchBackendMediaBlobUrl(url, {
+            signal: abortController.signal,
+          });
+          revoke = media.revoke;
+
+          if (cancelled) {
+            revoke();
+            return;
+          }
+
+          const loadedTex = await loadThreeTexture(loader, media.url);
+          if (cancelled) {
+            loadedTex.dispose();
+            revoke();
+            return;
+          }
+
+          const img = loadedTex.image;
+          const aspect =
+            img && img.width > 0 && img.height > 0 ? img.width / img.height : 1.0;
+
+          swapMaterialTexture(loadedTex, aspect);
+          revoke();
+          revoke = null;
+          setTextureSource(source);
+          return;
+        } catch (err) {
+          if (revoke) revoke();
+          if (cancelled || err?.name === 'AbortError') return;
+          // Jika kandidat ini gagal dimuat (404/network/decode), coba kandidat berikutnya
+        }
+      }
+
+      if (!cancelled) {
+        setTextureSource('canvas');
+      }
+    };
+
+    loadCandidates();
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
+  }, [activeProduct, swapMaterialTexture]);
+
+  // Perbarui skala repeat & pola sambungan tekstur secara instan tanpa memuat ulang gambar
+  useEffect(() => {
+    const state = sceneStateRef.current;
+    if (!state.batikMaterial?.map) return;
+
+    applyTextureMapping(state.batikMaterial.map, {
+      model: activeModel,
+      scale: textureScale,
+      aspect: state.textureAspect,
+      seamlessMirror,
+    });
     state.batikMaterial.needsUpdate = true;
-    if (oldTexture) oldTexture.dispose();
-  }, [activeProduct, activeModel]);
 
+    if (state.renderer && state.scene && state.camera) {
+      state.renderer.render(state.scene, state.camera);
+    }
+  }, [activeModel, textureScale, seamlessMirror]);
+
+  // Bangun geometri 3D sesuai model pilihan
   useEffect(() => {
     const state = sceneStateRef.current;
     const group = state.modelGroup;
@@ -662,12 +856,23 @@ export default function Batik3DStudio({
       : activeModel === 'fabric'
       ? 'Kain Panjang Gawangan'
       : 'Tas Butik & Selendang';
-  const waHref = buildProductOrderWaUrl(
-    activeProduct.shop,
-    effectiveWa,
-    activeProduct,
-    `Studio Mockup 3D (${modelName})`
-  );
+  const waHref = effectiveWa
+    ? buildProductOrderWaUrl(
+        activeProduct.shop,
+        effectiveWa,
+        activeProduct,
+        `Studio Mockup 3D (${modelName})`
+      )
+    : '';
+
+  const textureBadgeLabel =
+    textureSource === 'loading'
+      ? 'Memuat tekstur kain...'
+      : textureSource === 'mockup'
+      ? 'Tekstur Mockup 3D Asli'
+      : textureSource === 'display'
+      ? 'Tekstur Foto Produk'
+      : 'Simulasi Motif Kanvas';
 
   return (
     <section
@@ -693,8 +898,8 @@ export default function Batik3DStudio({
             Studio Mockup 3D Batik Trenggalek
           </h2>
           <p className="text-[15px] text-[#575049] mt-2 leading-relaxed">
-            Simulasikan motif pada kemeja tailored, kain panjang wiru, atau tas butik sebelum
-            memesan ke sanggar.
+            Simulasikan motif kain asli sanggar pada kemeja tailored, kain panjang wiru, atau tas
+            butik sebelum memesan lewat WhatsApp.
           </p>
         </FadeIn>
 
@@ -745,6 +950,19 @@ export default function Batik3DStudio({
                 </button>
                 <button
                   type="button"
+                  onClick={() => setSeamlessMirror((v) => !v)}
+                  title="Ubah mode pengulangan sambungan motif pada kain 3D"
+                  className={`inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] border text-[13px] font-medium cursor-pointer transition-colors ${
+                    seamlessMirror
+                      ? 'bg-[#F3E9E2] text-[#7C3219] border-[#7C3219]/40'
+                      : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
+                  }`}
+                >
+                  <Grid2x2 className="w-3.5 h-3.5" />
+                  <span>{seamlessMirror ? 'Sambungan Halus' : 'Ulang Standar'}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setAutoRotate((v) => !v)}
                   className={`min-h-[40px] px-3 py-1.5 rounded-[10px] border text-[13px] font-medium cursor-pointer transition-colors ${
                     autoRotate
@@ -760,6 +978,7 @@ export default function Batik3DStudio({
                     sceneStateRef.current.targetRotY = 0.28;
                     sceneStateRef.current.targetRotX = 0.08;
                     setZoom(1.0);
+                    setTextureScale(1.0);
                   }}
                   className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#575049] hover:text-[#1C1917] text-[13px] font-medium cursor-pointer"
                 >
@@ -783,26 +1002,71 @@ export default function Batik3DStudio({
                   : 'bg-[#1F1814]'
               }`}
             >
+              {/* Indikator Sumber Tekstur 3D */}
+              <div className="pointer-events-none absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1B1714]/80 text-[#F5F1E8] text-[12px] font-medium backdrop-blur-xs border border-white/10">
+                {textureSource === 'loading' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4A46B]" />
+                ) : (
+                  <Layers className="w-3.5 h-3.5 text-[#C4A46B]" />
+                )}
+                <span>{textureBadgeLabel}</span>
+              </div>
+
               <div ref={mountRef} className="w-full h-full" />
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <ZoomOut className="w-4 h-4 text-[#575049] shrink-0" />
-                <input
-                  type="range"
-                  min="0.75"
-                  max="1.5"
-                  step="0.01"
-                  value={zoom}
-                  onChange={(e) => setZoom(parseFloat(e.target.value))}
-                  className="w-full accent-[#7C3219] cursor-pointer"
-                  aria-label="Zoom 3D Mockup"
-                />
-                <ZoomIn className="w-4 h-4 text-[#575049] shrink-0" />
+            {/* Kontrol Zoom & Skala Motif */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[12px] text-[#575049]">
+                    <span>Perbesar Kamera</span>
+                    <span className="tabular-nums font-medium text-[#1C1917]">
+                      {Math.round(zoom * 100)}%
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <ZoomOut className="w-4 h-4 text-[#575049] shrink-0" />
+                    <input
+                      type="range"
+                      min="0.75"
+                      max="1.5"
+                      step="0.01"
+                      value={zoom}
+                      onChange={(e) => setZoom(parseFloat(e.target.value))}
+                      className="w-full accent-[#7C3219] cursor-pointer"
+                      aria-label="Zoom 3D Mockup"
+                    />
+                    <ZoomIn className="w-4 h-4 text-[#575049] shrink-0" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[12px] text-[#575049]">
+                    <span>Skala Kerapatan Motif</span>
+                    <span className="tabular-nums font-medium text-[#1C1917]">
+                      {textureScale.toFixed(2)}×
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[11px] text-[#575049] shrink-0">Besar</span>
+                    <input
+                      type="range"
+                      min="0.55"
+                      max="2.4"
+                      step="0.05"
+                      value={textureScale}
+                      onChange={(e) => setTextureScale(parseFloat(e.target.value))}
+                      className="w-full accent-[#7C3219] cursor-pointer"
+                      aria-label="Skala Kerapatan Motif 3D"
+                    />
+                    <span className="text-[11px] text-[#575049] shrink-0">Rapat</span>
+                  </div>
+                </div>
               </div>
+
               <p className="text-[13px] text-[#575049] text-center">
-                Seret untuk memutar 360° · Gulir atau geser kontrol untuk memperbesar
+                Seret untuk memutar 360° · Gulir untuk zoom · Geser skala untuk mengatur ukuran motif
               </p>
             </div>
           </FadeIn>
@@ -848,6 +1112,8 @@ export default function Batik3DStudio({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
                   {filteredStudioProducts.map((prod) => {
                     const isSelected = prod.id === activeProduct.id;
+                    const hasDedicatedMockup = Boolean(resolveProductMockupUrl(prod));
+                    const thumbUrl = resolveProductMockupUrl(prod) || resolveProductDisplayUrl(prod);
                     return (
                       <button
                         key={prod.id}
@@ -859,12 +1125,22 @@ export default function Batik3DStudio({
                             : 'border-[#1C1917]/12 bg-[#FCFBF8] hover:border-[#1C1917]/30'
                         }`}
                       >
-                        <ProductArtwork
-                          product={prod}
-                          imageUrl={prod.primaryImageUrl}
-                          size={72}
-                          className="w-10 h-10 rounded-sm shrink-0 border border-[#1C1917]/12"
-                        />
+                        <div className="relative shrink-0">
+                          <ProductArtwork
+                            product={prod}
+                            imageUrl={thumbUrl}
+                            size={72}
+                            className="w-10 h-10 rounded-sm border border-[#1C1917]/12"
+                          />
+                          {hasDedicatedMockup && (
+                            <span
+                              title="Memiliki tekstur mockup 3D khusus"
+                              className="absolute -bottom-1 -right-1 px-1 py-px rounded bg-[#7C3219] text-white text-[9px] font-semibold leading-tight"
+                            >
+                              3D
+                            </span>
+                          )}
+                        </div>
                         <div className="min-w-0">
                           <span
                             className={`block text-[13px] font-medium truncate ${
@@ -873,7 +1149,7 @@ export default function Batik3DStudio({
                           >
                             {prod.name}
                           </span>
-                          <span className="block text-[13px] text-[#575049] truncate">
+                          <span className="block text-[12px] text-[#575049] truncate">
                             {prod.shop.name}
                           </span>
                         </div>
@@ -910,32 +1186,42 @@ export default function Batik3DStudio({
                   </span>
                 </div>
 
-                <dl className="divide-y divide-[#1C1917]/10 text-[13px]">
-                  {activeProduct.formattedAttributes.slice(0, 4).map((attr) => (
-                    <div key={attr.name} className="py-2 flex items-center justify-between gap-3">
-                      <dt className="text-[#575049]">{attr.label}</dt>
-                      <dd className="font-medium text-[#1C1917] text-right truncate">
-                        {attr.displayValue}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                {activeProduct.formattedAttributes.length > 0 && (
+                  <dl className="divide-y divide-[#1C1917]/10 text-[13px]">
+                    {activeProduct.formattedAttributes.slice(0, 4).map((attr) => (
+                      <div key={attr.name} className="py-2 flex items-center justify-between gap-3">
+                        <dt className="text-[#575049]">{attr.label}</dt>
+                        <dd className="font-medium text-[#1C1917] text-right truncate">
+                          {attr.displayValue}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
             </div>
 
             <div className="space-y-2.5 pt-3 border-t border-[#1C1917]/12">
-              <a
-                href={waHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="taste-btn-wa w-full"
-              >
-                <MessageCircle className="w-4 h-4 shrink-0" />
-                <span>Pesan Produk Ini via WhatsApp</span>
-              </a>
-              <p className="text-[13px] text-center text-[#575049] tabular-nums">
-                Detail produk dikirim langsung ke WhatsApp +{effectiveWa}
-              </p>
+              {waHref ? (
+                <>
+                  <a
+                    href={waHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="taste-btn-wa w-full"
+                  >
+                    <MessageCircle className="w-4 h-4 shrink-0" />
+                    <span>Pesan Produk Ini via WhatsApp</span>
+                  </a>
+                  <p className="text-[13px] text-center text-[#575049] tabular-nums">
+                    Detail produk dikirim langsung ke WhatsApp +{effectiveWa}
+                  </p>
+                </>
+              ) : (
+                <div className="min-h-[44px] px-4 py-2 rounded-[10px] bg-[#EFEAE0] text-[#575049] text-[13px] font-medium flex items-center justify-center">
+                  Nomor WhatsApp sanggar belum tersedia
+                </div>
+              )}
             </div>
           </FadeIn>
         </div>

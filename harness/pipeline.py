@@ -1,4 +1,4 @@
-# pipeline.py
+# harness/pipeline.py
 """
 RAG Pipeline versi harness.
 
@@ -32,16 +32,13 @@ from typing import Dict, List, Optional
 import chromadb
 import requests
 from chromadb.config import Settings
-from dotenv import load_dotenv
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from cache import get_cache
+from url_controller import ROOT_DIR, build_backend_url, get_backend_headers
 
 # ── Import config dari root project ─────────────────────────────────────
-ROOT_DIR = Path(__file__).resolve().parent.parent
 from config import CONFIG  # noqa: E402
-
-load_dotenv(ROOT_DIR / ".env")
 
 logger = logging.getLogger("harness.pipeline")
 _LLM_ERROR_ANSWER = "Maaf, terjadi kesalahan saat memproses jawaban."
@@ -75,8 +72,7 @@ SOCIAL_TOP_P         = float(CONFIG["social_top_p"])
 PRODUCT_MAX_TOKENS   = int(CONFIG.get("product_max_new_tokens", 350))
 
 # ── Backend e-commerce (product recommendation) ─────────────────────────
-BACKEND_BASE_URL     = os.environ.get("BACKEND_BASE_URL", "http://127.0.0.1:3002").rstrip("/")
-BACKEND_PRODUCT_PATH = CONFIG.get("backend_product_path", "/api/products/search")
+BACKEND_PRODUCT_PATH = CONFIG.get("backend_product_path", "/chatbot/products/search")
 BACKEND_TIMEOUT      = int(CONFIG.get("backend_timeout", 10))
 PRODUCT_K            = int(CONFIG.get("product_recommendation_k", 5))
 
@@ -485,7 +481,7 @@ class HarnessPipeline:
         )
 
     def _fetch_products_from_backend(self, filters: Dict) -> List[Dict]:
-        url = f"{BACKEND_BASE_URL}{BACKEND_PRODUCT_PATH}"
+        url = build_backend_url(BACKEND_PRODUCT_PATH)
         params: Dict = {"limit": PRODUCT_K}
         if filters.get("keyword"):
             params["keyword"] = filters["keyword"]
@@ -495,7 +491,12 @@ class HarnessPipeline:
             params["max_harga"] = filters["max_harga"]
 
         try:
-            r = requests.get(url, params=params, timeout=BACKEND_TIMEOUT)
+            r = requests.get(
+                url,
+                params=params,
+                headers=get_backend_headers(),
+                timeout=BACKEND_TIMEOUT,
+            )
             r.raise_for_status()
             data = r.json()
 

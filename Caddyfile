@@ -1,0 +1,30 @@
+# project_alpha/Caddyfile
+# Listen di HTTP port 8080 saja (HTTPS diurus oleh ngrok di depan)
+:8080 {
+    # 1. Backend FastAPI (port 3002)
+    #    Pakai handle_path agar prefix "/backend" dipotong sebelum masuk ke 3002
+    #    Contoh: /backend/shop -> 127.0.0.1:3002/shop
+    handle_path /backend/* {
+        reverse_proxy 127.0.0.1:3002
+    }
+
+    # 2. Storage FastAPI (port 3003)
+    #    WAJIB pakai handle (bukan handle_path) karena router storage sudah
+    #    punya prefix "/storage" (contoh: /storage/health, /storage/upload/...)
+    handle /storage/* {
+        reverse_proxy 127.0.0.1:3003
+    }
+
+    # 3. Harness AI FastAPI (port 3001)
+    #    Pakai handle_path agar prefix "/harness" dipotong sebelum masuk ke 3001
+    #    Contoh: /harness/health -> 127.0.0.1:3001/health
+    handle_path /harness/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    # 4. Frontend Vite (port 5173) — opsional, melayani root "/"
+    #    Aman tetap dipasang walau kamu masih akses localhost:5173 atau nanti Vercel
+    handle {
+        reverse_proxy 127.0.0.1:5173
+    }
+}

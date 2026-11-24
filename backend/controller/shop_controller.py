@@ -21,6 +21,8 @@ from service.shop_service import (
     update_my_shop,
 )
 
+from url_controller import COOKIE_SAMESITE, COOKIE_SECURE
+
 router = APIRouter(prefix="/shop", tags=["Shop"])
 
 
@@ -193,7 +195,7 @@ async def controller_register_shop(
         value=token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=86400,
     )
 

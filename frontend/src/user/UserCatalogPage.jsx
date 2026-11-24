@@ -4,8 +4,6 @@ import {
   MessageCircle,
   BookOpen,
   Search,
-  Upload,
-  Download,
   MapPin,
   Layers,
   Menu,
@@ -15,14 +13,16 @@ import {
   ChevronDown,
   ExternalLink,
   RotateCcw,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
-import { INITIAL_DATABASE } from './data/databaseSeed';
 import {
   formatRupiah,
   buildWhatsAppUrl,
   buildProductOrderWaUrl,
-  buildRelationalCatalog,
 } from './utils/helpers';
+import { fetchUserCatalogData } from './utils/userService';
 import FadeIn from '../components/FadeIn';
 import ProductArtwork from './components/ProductArtwork';
 import PhysicalCatalogBookSection from './components/PhysicalCatalogBook';
@@ -31,14 +31,19 @@ const Batik3DStudio = lazy(() => import('./components/Batik3DStudio'));
 const BatikChatbotWidget = lazy(() => import('./components/BatikChatbotWidget'));
 
 export default function UserCatalogPage({
-  externalDb,
-  onExternalDbChange,
-  initialFocusShopId,
+  initialFocusShopId = null,
   onOpenSellerPortal,
 } = {}) {
-  const [localDb, setLocalDb] = useState(INITIAL_DATABASE);
-  const db = externalDb ?? localDb;
-  const setDb = onExternalDbChange ?? setLocalDb;
+  // State Data Backend
+  const [catalogData, setCatalogData] = useState({
+    activeShops: [],
+    categories: [],
+    enrichedProducts: [],
+    shopBooks: [],
+  });
+  const [loadStatus, setLoadStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
+  const [loadError, setLoadError] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State Pencarian & Filter Multi-Atribut
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,13 +54,11 @@ export default function UserCatalogPage({
 
   // State Buku Katalog & Studio 3D
   const [selectedBookShopId, setSelectedBookShopId] = useState(
-    () => initialFocusShopId || db.shop?.[0]?.id || INITIAL_DATABASE.shop[0].id
+    () => initialFocusShopId || null
   );
-  const [activeProductId, setActiveProductId] = useState(
-    () => db.product?.[0]?.id || INITIAL_DATABASE.product[0].id
-  );
-  const [activeModel, setActiveModel] = useState('shirt');
-  const [bookPageIndex, setBookPageIndex] = useState(() => (initialFocusShopId ? 1 : 0));
+  const [activeProductId, setActiveProductId] = useState(null);
+  const [activeModel, setActiveModel] = useState('fabric');
+  const [bookPageIndex, setBookPageIndex] = useState(0);
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [customWaMap, setCustomWaMap] = useState({});
 
@@ -65,7 +68,7 @@ export default function UserCatalogPage({
   const [toastMsg, setToastMsg] = useState('');
 
   const headerRef = useRef(null);
-  const jsonInputRef = useRef(null);
+  const didAutoFocusRef = useRef(false);
 
   const [gridCols, setGridCols] = useState(() => {
     if (typeof window === 'undefined') return 3;
@@ -73,6 +76,79 @@ export default function UserCatalogPage({
     if (window.innerWidth >= 640) return 2;
     return 1;
   });
+
+  const showToast = useCallback((msg) => {
+    setToastMsg(msg);
+    setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? '' : prev));
+    }, 2800);
+  }, []);
+
+  // Muat data sanggar, kategori, dan produk aktif dari backend port 3002
+  const loadCatalog = useCallback(
+    async ({ silent = false } = {}) => {
+      if (silent) {
+        setIsRefreshing(true);
+      } else {
+        setLoadStatus('loading');
+        setLoadError('');
+      }
+
+      try {
+        const data = await fetchUserCatalogData();
+        setCatalogData(data);
+
+        const focusedBook = initialFocusShopId
+          ? data.shopBooks.find((b) => b.shop.id === initialFocusShopId)
+          : null;
+
+        setSelectedBookShopId((prev) => {
+          if (focusedBook) return focusedBook.shop.id;
+          if (prev && data.shopBooks.some((b) => b.shop.id === prev)) return prev;
+          return data.shopBooks[0]?.shop.id || null;
+        });
+
+        setActiveProductId((prev) => {
+          if (prev && data.enrichedProducts.some((p) => p.id === prev)) return prev;
+          if (focusedBook?.products?.[0]) return focusedBook.products[0].id;
+          return data.enrichedProducts[0]?.id || null;
+        });
+
+        if (focusedBook && !didAutoFocusRef.current) {
+          didAutoFocusRef.current = true;
+          setBookPageIndex(focusedBook.products.length > 0 ? 1 : 0);
+          setTimeout(() => {
+            const el = document.getElementById('buku-katalog');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 120);
+        }
+
+        setLoadStatus('ready');
+        setLoadError('');
+        if (silent) {
+          showToast('Data katalog berhasil diperbarui dari database.');
+        }
+      } catch (err) {
+        const msg =
+          err?.message ||
+          'Tidak dapat terhubung ke server backend. Pastikan server backend (port 3002) sedang aktif.';
+        setLoadError(msg);
+        if (!silent) {
+          setLoadStatus('error');
+        } else {
+          showToast(msg);
+        }
+      } finally {
+        if (silent) setIsRefreshing(false);
+      }
+    },
+    [initialFocusShopId, showToast]
+  );
+
+  useEffect(() => {
+    didAutoFocusRef.current = false;
+    loadCatalog();
+  }, [loadCatalog]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -105,30 +181,20 @@ export default function UserCatalogPage({
     };
   }, []);
 
-  const showToast = useCallback((msg) => {
-    setToastMsg(msg);
-    setTimeout(() => {
-      setToastMsg((prev) => (prev === msg ? '' : prev));
-    }, 2600);
-  }, []);
-
   const getEffectiveWa = useCallback(
-    (shopId, fallbackWa) => customWaMap[shopId] || fallbackWa,
+    (shopId, fallbackWa) => customWaMap[shopId] || fallbackWa || '',
     [customWaMap]
   );
 
   const handleUpdateShopWa = useCallback(
     (shopId, newWa) => {
       setCustomWaMap((prev) => ({ ...prev, [shopId]: newWa }));
-      showToast('Nomor WhatsApp sanggar berhasil diperbarui.');
+      showToast('Nomor WhatsApp sanggar diperbarui untuk sesi ini.');
     },
     [showToast]
   );
 
-  const { activeShops, enrichedProducts, shopBooks } = useMemo(
-    () => buildRelationalCatalog(db),
-    [db]
-  );
+  const { activeShops, categories, enrichedProducts, shopBooks } = catalogData;
 
   const minPrice = useMemo(() => {
     if (!enrichedProducts.length) return 0;
@@ -154,7 +220,6 @@ export default function UserCatalogPage({
         }
       });
 
-      // Fallback deteksi dari nama/deskripsi jika atribut eksplisit belum terisi
       const text = `${p.name} ${p.description}`.toLowerCase();
       if (text.includes('batik tulis') || text.includes('kain tulis')) {
         typeSet.add('Batik Tulis');
@@ -248,65 +313,23 @@ export default function UserCatalogPage({
     [groupedCatalogByShop]
   );
 
-  const handleJsonImport = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(String(ev.target?.result || '{}'));
-        if (Array.isArray(parsed.shop) && Array.isArray(parsed.product)) {
-          setDb({
-            account: parsed.account || [],
-            shop: parsed.shop || [],
-            category: parsed.category || [],
-            category_attribute: parsed.category_attribute || [],
-            product: parsed.product || [],
-            product_display_image: parsed.product_display_image || [],
-            product_mockup_image: parsed.product_mockup_image || [],
-          });
-          if (parsed.shop[0]) setSelectedBookShopId(parsed.shop[0].id);
-          if (parsed.product[0]) setActiveProductId(parsed.product[0].id);
-          setBookPageIndex(0);
-          handleResetFilters();
-          showToast(
-            `Database JSON (${parsed.shop.length} sanggar, ${parsed.product.length} produk) dimuat.`
-          );
-        } else {
-          showToast('JSON harus memiliki tabel "shop" dan "product".');
-        }
-      } catch {
-        showToast('File JSON tidak valid.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleJsonExport = () => {
-    const blob = new Blob([JSON.stringify(db, null, 2)], {
-      type: 'application/json;charset=utf-8;',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'batik_trenggalek_7_tables_db.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleTryIn3D = useCallback(
     (productId) => {
       const prod = enrichedProducts.find((p) => p.id === productId);
       setActiveProductId(productId);
-      if (prod?.category?.slug === 'kemeja-batik-jadi') {
-        setActiveModel('shirt');
-      } else if (
-        prod?.category?.slug === 'kain-batik' ||
-        prod?.category?.slug === 'batik-partai-kiloan'
+
+      const bentuk = String(prod?.additional_attribute?.bentuk || '').toLowerCase();
+      if (
+        prod?.category?.slug === 'kemeja-batik-jadi' ||
+        /baju|kemeja|hem|blouse|dress/.test(bentuk)
       ) {
+        setActiveModel('shirt');
+      } else if (/tas|selendang|syal/.test(bentuk)) {
+        setActiveModel('tote');
+      } else {
         setActiveModel('fabric');
       }
+
       const el = document.getElementById('mockup-3d');
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     },
@@ -321,9 +344,9 @@ export default function UserCatalogPage({
 
       if (productId && book) {
         const idxInBook = book.products.findIndex((p) => p.id === productId);
-        setBookPageIndex(idxInBook >= 0 ? idxInBook + 1 : 1);
+        setBookPageIndex(idxInBook >= 0 ? idxInBook + 1 : book.products.length > 0 ? 1 : 0);
       } else {
-        setBookPageIndex(1);
+        setBookPageIndex(book && book.products.length > 0 ? 1 : 0);
       }
 
       const el = document.getElementById('buku-katalog');
@@ -333,9 +356,59 @@ export default function UserCatalogPage({
   );
 
   const activeHighlightProduct = useMemo(
-    () => enrichedProducts.find((p) => p.id === activeProductId) || enrichedProducts[0],
+    () => enrichedProducts.find((p) => p.id === activeProductId) || enrichedProducts[0] || null,
     [enrichedProducts, activeProductId]
   );
+
+  // State 1: Memuat data dari backend
+  if (loadStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] flex flex-col items-center justify-center gap-3 px-4">
+        <Loader2 className="w-7 h-7 animate-spin text-[#7C3219]" />
+        <p className="font-serif text-lg text-[#1C1917]">
+          Memuat Katalog Wastra Batik Trenggalek...
+        </p>
+      </div>
+    );
+  }
+
+  // State 2: Gagal memuat data dari backend
+  if (loadStatus === 'error') {
+    return (
+      <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-xl bg-[#FCFBF8] border border-[#1C1917]/12 p-8 text-center space-y-5">
+          <div className="w-12 h-12 rounded-full bg-[#9E2A2B]/10 text-[#9E2A2B] flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-serif font-normal text-2xl text-[#1C1917]">
+              Gagal Memuat Katalog
+            </h1>
+            <p className="text-[14px] text-[#575049] leading-relaxed">{loadError}</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => loadCatalog()}
+              className="taste-btn-primary"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Coba Lagi</span>
+            </button>
+            {onOpenSellerPortal && (
+              <button
+                type="button"
+                onClick={onOpenSellerPortal}
+                className="taste-btn-secondary"
+              >
+                <span>Portal Perajin</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] font-sans selection:bg-[#7C3219] selection:text-white">
@@ -439,40 +512,54 @@ export default function UserCatalogPage({
                       Pilih sanggar UMKM yang ingin Anda hubungi:
                     </p>
                   </div>
-                  <div className="divide-y divide-[#1C1917]/10 max-h-72 overflow-y-auto">
-                    {activeShops.map((s) => {
-                      const waNum = getEffectiveWa(s.id, s.number);
-                      const waLink = buildWhatsAppUrl(
-                        waNum,
-                        `Halo *${s.name}*, saya mengunjungi katalog *Batik Wicara Trenggalek* dan ingin menanyakan produk batik Anda.`
-                      );
-                      return (
-                        <div
-                          key={s.id}
-                          className="py-2.5 px-2 flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <span className="text-[13.5px] font-medium text-[#1C1917] block leading-snug">
-                              {s.name}
-                            </span>
-                            <span className="text-[12px] text-[#575049] block truncate">
-                              {s.address}
-                            </span>
-                          </div>
-                          <a
-                            href={waLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => setSanggarContactOpen(false)}
-                            className="shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                  {activeShops.length === 0 ? (
+                    <p className="px-2 py-4 text-[13px] text-[#575049] text-center">
+                      Belum ada sanggar aktif terdaftar.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-[#1C1917]/10 max-h-72 overflow-y-auto">
+                      {activeShops.map((s) => {
+                        const waNum = getEffectiveWa(s.id, s.number);
+                        const waLink = waNum
+                          ? buildWhatsAppUrl(
+                              waNum,
+                              `Halo *${s.name}*, saya mengunjungi katalog *Batik Wicara Trenggalek* dan ingin menanyakan produk batik Anda.`
+                            )
+                          : '';
+                        return (
+                          <div
+                            key={s.id}
+                            className="py-2.5 px-2 flex items-center justify-between gap-3"
                           >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span>WA</span>
-                          </a>
-                        </div>
-                      );
-                    })}
-                  </div>
+                            <div className="min-w-0">
+                              <span className="text-[13.5px] font-medium text-[#1C1917] block leading-snug">
+                                {s.name}
+                              </span>
+                              <span className="text-[12px] text-[#575049] block truncate">
+                                {s.address || 'Kabupaten Trenggalek'}
+                              </span>
+                            </div>
+                            {waLink ? (
+                              <a
+                                href={waLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => setSanggarContactOpen(false)}
+                                className="shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[12.5px] font-medium inline-flex items-center gap-1.5 transition-colors"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                <span>WA</span>
+                              </a>
+                            ) : (
+                              <span className="shrink-0 text-[12px] text-[#575049]">
+                                Belum ada WA
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -553,9 +640,10 @@ export default function UserCatalogPage({
               </h1>
 
               <p className="text-[16px] sm:text-[17px] leading-[1.6] text-[#575049] max-w-[46ch] hero-enter-step-1">
-                Telusuri kain tulis, kemeja jadi, dan batik cap langsung dari lima sanggar di
-                Trenggalek. Pratinjau motif pada busana 3D lalu pesan langsung ke perajin lewat
-                WhatsApp.
+                Telusuri koleksi batik tulis, batik cap, dan kombinasi langsung dari{' '}
+                {activeShops.length > 0 ? `${activeShops.length} sanggar UMKM` : 'para perajin'} di
+                Kabupaten Trenggalek. Pratinjau motif pada busana 3D lalu pesan langsung ke perajin
+                lewat WhatsApp.
               </p>
 
               <div className="flex flex-wrap items-center gap-3 pt-1 hero-enter-step-2">
@@ -573,13 +661,13 @@ export default function UserCatalogPage({
                 <div>
                   <span className="block text-[13px] text-[#575049]">Rentang harga</span>
                   <span className="block text-[15px] font-medium text-[#1C1917] tabular-nums mt-0.5">
-                    Mulai {formatRupiah(minPrice)}
+                    {minPrice > 0 ? `Mulai ${formatRupiah(minPrice)}` : 'Belum ada koleksi'}
                   </span>
                 </div>
                 <div>
-                  <span className="block text-[13px] text-[#575049]">Sentra pengrajin</span>
-                  <span className="block text-[15px] font-medium text-[#1C1917] mt-0.5">
-                    Suruh, Kelutan, Kampak, Durenan
+                  <span className="block text-[13px] text-[#575049]">Koleksi terdaftar</span>
+                  <span className="block text-[15px] font-medium text-[#1C1917] tabular-nums mt-0.5">
+                    {activeShops.length} sanggar · {enrichedProducts.length} produk
                   </span>
                 </div>
                 <div>
@@ -777,7 +865,7 @@ export default function UserCatalogPage({
                   ))}
                 </div>
 
-                {/* Row 2: Category Filter (Warna Aktif Sogan) & Result Count */}
+                {/* Row 2: Category Filter & Result Count */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -791,7 +879,7 @@ export default function UserCatalogPage({
                     >
                       Semua Kategori
                     </button>
-                    {(db.category || []).map((cat) => (
+                    {categories.map((cat) => (
                       <button
                         key={cat.id}
                         type="button"
@@ -808,7 +896,9 @@ export default function UserCatalogPage({
                   </div>
 
                   <span className="text-[13px] text-[#575049] tabular-nums">
-                    Menampilkan <strong className="text-[#1C1917] font-medium">{totalFilteredCount}</strong> koleksi
+                    Menampilkan{' '}
+                    <strong className="text-[#1C1917] font-medium">{totalFilteredCount}</strong>{' '}
+                    koleksi
                   </span>
                 </div>
               </div>
@@ -816,18 +906,26 @@ export default function UserCatalogPage({
 
             {groupedCatalogByShop.length === 0 ? (
               <div className="rounded-lg border border-[#1C1917]/15 bg-[#FCFBF8] p-12 text-center space-y-3">
-                <p className="font-serif text-xl text-[#1C1917]">Koleksi tidak ditemukan</p>
-                <p className="text-[14px] text-[#575049]">
-                  Tidak ada batik yang cocok dengan kombinasi filter saat ini.
+                <p className="font-serif text-xl text-[#1C1917]">
+                  {enrichedProducts.length === 0
+                    ? 'Belum ada produk tayang di katalog'
+                    : 'Koleksi tidak ditemukan'}
                 </p>
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  className="taste-btn-secondary mt-2"
-                >
-                  <RotateCcw className="w-4 h-4 text-[#7C3219]" />
-                  <span>Reset Semua Filter</span>
-                </button>
+                <p className="text-[14px] text-[#575049]">
+                  {enrichedProducts.length === 0
+                    ? 'Produk yang diterbitkan oleh sanggar melalui Portal Perajin akan otomatis tampil di sini.'
+                    : 'Tidak ada batik yang cocok dengan kombinasi filter saat ini.'}
+                </p>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="taste-btn-secondary mt-2"
+                  >
+                    <RotateCcw className="w-4 h-4 text-[#7C3219]" />
+                    <span>Reset Semua Filter</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div
@@ -836,10 +934,12 @@ export default function UserCatalogPage({
               >
                 {groupedCatalogByShop.map((bk) => {
                   const shopWa = getEffectiveWa(bk.shop.id, bk.shop.number);
-                  const directShopWaUrl = buildWhatsAppUrl(
-                    shopWa,
-                    `Halo *${bk.shop.name}*, saya melihat katalog produk Anda di *Batik Wicara Trenggalek* dan ingin menanyakan ketersediaan stok.`
-                  );
+                  const directShopWaUrl = shopWa
+                    ? buildWhatsAppUrl(
+                        shopWa,
+                        `Halo *${bk.shop.name}*, saya melihat katalog produk Anda di *Batik Wicara Trenggalek* dan ingin menanyakan ketersediaan stok.`
+                      )
+                    : '';
 
                   const productRows = [];
                   for (let i = 0; i < bk.products.length; i += gridCols) {
@@ -851,19 +951,20 @@ export default function UserCatalogPage({
                       <FadeIn className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
                         <div className="space-y-1.5">
                           <p className="text-[13px] text-[#575049]">
-                            {bk.account ? `Pengelola: ${bk.account.display_name} · ` : ''}
                             {bk.products.length} koleksi aktif
                           </p>
                           <h3 className="font-serif font-normal text-2xl sm:text-[28px] leading-tight text-[#1C1917]">
                             {bk.shop.name}
                           </h3>
-                          <p className="text-[14px] text-[#575049] flex items-center gap-1.5">
-                            <MapPin className="w-4 h-4 text-[#7C3219] shrink-0" />
-                            <span>{bk.shop.address}</span>
-                          </p>
+                          {bk.shop.address && (
+                            <p className="text-[14px] text-[#575049] flex items-center gap-1.5">
+                              <MapPin className="w-4 h-4 text-[#7C3219] shrink-0" />
+                              <span>{bk.shop.address}</span>
+                            </p>
+                          )}
                         </div>
 
-                        {/* Hierarki Tombol Sanggar: Hubungi (Utama), Buku (Sekunder), Toko Online (Tautan) */}
+                        {/* Hierarki Tombol Sanggar */}
                         <div className="flex flex-wrap items-center gap-3">
                           {bk.shop.online_shop && (
                             <a
@@ -885,15 +986,17 @@ export default function UserCatalogPage({
                             <BookOpen className="w-4 h-4 text-[#7C3219] shrink-0" />
                             <span>Buka Buku Sanggar</span>
                           </button>
-                          <a
-                            href={directShopWaUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="taste-btn-wa"
-                          >
-                            <MessageCircle className="w-4 h-4 shrink-0" />
-                            <span>Hubungi Sanggar</span>
-                          </a>
+                          {directShopWaUrl && (
+                            <a
+                              href={directShopWaUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="taste-btn-wa"
+                            >
+                              <MessageCircle className="w-4 h-4 shrink-0" />
+                              <span>Hubungi Sanggar</span>
+                            </a>
+                          )}
                         </div>
                       </FadeIn>
 
@@ -904,12 +1007,14 @@ export default function UserCatalogPage({
                             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 fade-row"
                           >
                             {rowProducts.map((prod, colIdx) => {
-                              const prodWaUrl = buildProductOrderWaUrl(
-                                bk.shop,
-                                shopWa,
-                                prod,
-                                `Etalase ${bk.shop.name}`
-                              );
+                              const prodWaUrl = shopWa
+                                ? buildProductOrderWaUrl(
+                                    bk.shop,
+                                    shopWa,
+                                    prod,
+                                    `Etalase ${bk.shop.name}`
+                                  )
+                                : '';
 
                               const typeAttr = (prod.formattedAttributes || []).find((a) =>
                                 /jenis|tipe|teknik|proses/i.test(`${a.name} ${a.label}`)
@@ -966,32 +1071,42 @@ export default function UserCatalogPage({
                                         )}
 
                                         <p className="text-[14px] text-[#575049] line-clamp-2 leading-relaxed">
-                                          {prod.description}
+                                          {prod.description || 'Karya batik khas Kabupaten Trenggalek.'}
                                         </p>
 
-                                        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-[#1C1917]/10 text-[13px]">
-                                          {prod.formattedAttributes.slice(0, 4).map((attr) => (
-                                            <div key={attr.name} className="min-w-0">
-                                              <dt className="text-[#575049] truncate">{attr.label}</dt>
-                                              <dd className="font-medium text-[#1C1917] truncate">
-                                                {attr.displayValue}
-                                              </dd>
-                                            </div>
-                                          ))}
-                                        </dl>
+                                        {prod.formattedAttributes.length > 0 && (
+                                          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-[#1C1917]/10 text-[13px]">
+                                            {prod.formattedAttributes.slice(0, 4).map((attr) => (
+                                              <div key={attr.name} className="min-w-0">
+                                                <dt className="text-[#575049] truncate">
+                                                  {attr.label}
+                                                </dt>
+                                                <dd className="font-medium text-[#1C1917] truncate">
+                                                  {attr.displayValue}
+                                                </dd>
+                                              </div>
+                                            ))}
+                                          </dl>
+                                        )}
                                       </div>
                                     </div>
 
                                     <div className="px-5 pb-5 pt-1 flex flex-col gap-2">
-                                      <a
-                                        href={prodWaUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="taste-btn-wa w-full"
-                                      >
-                                        <MessageCircle className="w-4 h-4 shrink-0" />
-                                        <span>Pesan via WhatsApp</span>
-                                      </a>
+                                      {prodWaUrl ? (
+                                        <a
+                                          href={prodWaUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="taste-btn-wa w-full"
+                                        >
+                                          <MessageCircle className="w-4 h-4 shrink-0" />
+                                          <span>Pesan via WhatsApp</span>
+                                        </a>
+                                      ) : (
+                                        <span className="min-h-[44px] px-4 py-2 rounded-[10px] bg-[#EFEAE0] text-[#575049] text-[13px] font-medium inline-flex items-center justify-center">
+                                          WhatsApp sanggar belum tersedia
+                                        </span>
+                                      )}
 
                                       <div className="grid grid-cols-2 gap-2">
                                         <button
@@ -1107,32 +1222,21 @@ export default function UserCatalogPage({
             </div>
 
             <div className="md:col-span-3 space-y-3">
-              <h3 className="text-[13px] font-medium text-[#B5ACA2]">Data Katalog</h3>
-              <input
-                ref={jsonInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleJsonImport}
-                className="hidden"
-              />
-              <div className="flex flex-col items-start gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => jsonInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-[10px] border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5 text-[#C4A46B]" />
-                  <span>Impor JSON DB</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleJsonExport}
-                  className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-[10px] border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5 text-[#C4A46B]" />
-                  <span>Ekspor JSON DB</span>
-                </button>
-              </div>
+              <h3 className="text-[13px] font-medium text-[#B5ACA2]">Sinkronisasi Katalog</h3>
+              <p className="text-[13px] text-[#B5ACA2] leading-relaxed">
+                Data sanggar dan produk dimuat langsung dari server database Batik Wicara.
+              </p>
+              <button
+                type="button"
+                onClick={() => loadCatalog({ silent: true })}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-[10px] border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 disabled:opacity-60 transition-colors cursor-pointer"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 text-[#C4A46B] ${isRefreshing ? 'animate-spin' : ''}`}
+                />
+                <span>{isRefreshing ? 'Memuat Ulang...' : 'Segarkan Katalog'}</span>
+              </button>
             </div>
           </div>
 

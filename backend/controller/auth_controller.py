@@ -14,6 +14,8 @@ from database import get_db
 from middleware import ALGORITHM, COOKIE_SECURE, SECRET_KEY
 from service.auth_service import login_oauth, logout_user
 
+from url_controller import COOKIE_SAMESITE, COOKIE_SECURE, build_backend_url
+
 logger = logging.getLogger("backend.auth_controller")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -51,7 +53,7 @@ def set_access_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=86400,
     )
 
@@ -66,7 +68,7 @@ def _redirect_login_error(code: str) -> RedirectResponse:
 # ==========================================
 @router.get("/google/login")
 async def google_login(request: Request):
-    redirect_uri = str(request.url_for("google_callback"))
+    redirect_uri = build_backend_url("/auth/google/callback")
     return await oauth.google.authorize_redirect(
         request, redirect_uri, prompt="select_account"
     )
@@ -144,5 +146,5 @@ def controller_pending_registration(request: Request):
 def controller_logout(request: Request, response: Response):
     logout_user()
     request.session.clear()
-    response.delete_cookie(key="access_token")
+    response.delete_cookie(key="access_token", secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE)
     return {"status": "success", "message": "Berhasil logout"}

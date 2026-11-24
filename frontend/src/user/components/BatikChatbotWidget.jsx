@@ -6,6 +6,7 @@ import {
   BookOpen,
   Layers,
   MessageCircle,
+  Loader2,
 } from 'lucide-react';
 import ProductArtwork from './ProductArtwork';
 import { formatRupiah, buildProductOrderWaUrl } from '../utils/helpers';
@@ -14,6 +15,135 @@ import {
   INITIAL_CHAT_MESSAGES,
   getChatbotResponse,
 } from '../utils/chatbotService';
+
+function renderInlineMarkdown(text) {
+  const tokens = String(text || '').split(
+    /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`)/g
+  );
+
+  return tokens.map((token, idx) => {
+    if (token.startsWith('***') && token.endsWith('***') && token.length > 6) {
+      return (
+        <strong key={idx} className="font-semibold italic">
+          {token.slice(3, -3)}
+        </strong>
+      );
+    }
+    if (token.startsWith('**') && token.endsWith('**') && token.length > 4) {
+      return (
+        <strong key={idx} className="font-semibold text-[#1C1917]">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (token.startsWith('*') && token.endsWith('*') && token.length > 2) {
+      return (
+        <em key={idx} className="italic">
+          {token.slice(1, -1)}
+        </em>
+      );
+    }
+    if (token.startsWith('`') && token.endsWith('`') && token.length > 2) {
+      return (
+        <code
+          key={idx}
+          className="px-1 py-0.5 rounded bg-[#EFEAE0] text-[12.5px] font-mono"
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    }
+    return <React.Fragment key={idx}>{token}</React.Fragment>;
+  });
+}
+
+function renderFormattedText(rawText) {
+  const lines = String(rawText || '').replace(/\r\n/g, '\n').split('\n');
+  const blocks = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    // Heading (#, ##, ###)
+    const headingMatch = trimmed.match(/^#{1,3}\s+(.+)$/);
+    if (headingMatch) {
+      blocks.push(
+        <p key={`h-${i}`} className="font-semibold text-[#1C1917]">
+          {renderInlineMarkdown(headingMatch[1])}
+        </p>
+      );
+      i += 1;
+      continue;
+    }
+
+    // Unordered list (- item, * item, atau • item)
+    if (/^[-*•]\s+/.test(trimmed)) {
+      const items = [];
+      const startIdx = i;
+      while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*•]\s+/, ''));
+        i += 1;
+      }
+      blocks.push(
+        <ul key={`ul-${startIdx}`} className="list-disc pl-4 space-y-1.5">
+          {items.map((item, idx) => (
+            <li key={idx} className="leading-relaxed">
+              {renderInlineMarkdown(item)}
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    // Ordered list (1. item)
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items = [];
+      const startIdx = i;
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s+/, ''));
+        i += 1;
+      }
+      blocks.push(
+        <ol key={`ol-${startIdx}`} className="list-decimal pl-4 space-y-1.5">
+          {items.map((item, idx) => (
+            <li key={idx} className="leading-relaxed">
+              {renderInlineMarkdown(item)}
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // Paragraf biasa
+    const paraLines = [];
+    const startIdx = i;
+    while (
+      i < lines.length &&
+      lines[i].trim() !== '' &&
+      !/^[-*•]\s+/.test(lines[i].trim()) &&
+      !/^\d+\.\s+/.test(lines[i].trim()) &&
+      !/^#{1,3}\s+/.test(lines[i].trim())
+    ) {
+      paraLines.push(lines[i].trim());
+      i += 1;
+    }
+    blocks.push(
+      <p key={`p-${startIdx}`} className="leading-relaxed">
+        {renderInlineMarkdown(paraLines.join(' '))}
+      </p>
+    );
+  }
+
+  return <div className="space-y-2">{blocks}</div>;
+}
 
 export default function BatikChatbotWidget({
   enrichedProducts,
@@ -27,12 +157,20 @@ export default function BatikChatbotWidget({
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isTyping, isOpen]);
+
+  // Batalkan polling bila komponen di-unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const handleSendMessage = async (rawText) => {
     const text = (rawText ?? inputText).trim();
@@ -49,29 +187,44 @@ export default function BatikChatbotWidget({
     setInputText('');
     setIsTyping(true);
 
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const reply = await getChatbotResponse(text, { enrichedProducts, shopBooks });
+      const reply = await getChatbotResponse(
+        text,
+        { enrichedProducts, shopBooks },
+        { signal: controller.signal }
+      );
       setMessages((prev) => [
         ...prev,
         {
           id: `bot-${Date.now()}`,
           sender: 'bot',
+          intent: reply.intent,
           text: reply.text,
           products: reply.products || [],
         },
       ]);
-    } catch {
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
       setMessages((prev) => [
         ...prev,
         {
           id: `err-${Date.now()}`,
           sender: 'bot',
-          text: 'Terjadi gangguan saat memproses pertanyaan. Silakan coba lagi.',
+          text:
+            err?.message ||
+            'Terjadi gangguan saat menghubungi asisten batik. Silakan coba lagi.',
           products: [],
         },
       ]);
     } finally {
-      setIsTyping(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsTyping(false);
+      }
     }
   };
 
@@ -111,25 +264,32 @@ export default function BatikChatbotWidget({
                   className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-2`}
                 >
                   <div
-                    className={`max-w-[86%] px-3.5 py-2.5 rounded-md text-[14px] leading-relaxed whitespace-pre-line ${
+                    className={`max-w-[88%] px-3.5 py-2.5 rounded-md text-[14px] leading-relaxed break-words ${
                       isUser
-                        ? 'bg-[#7C3219] text-white'
+                        ? 'bg-[#7C3219] text-white whitespace-pre-line'
                         : 'bg-[#FCFBF8] text-[#1C1917] border border-[#1C1917]/12'
                     }`}
                   >
-                    {msg.text}
+                    {isUser ? msg.text : renderFormattedText(msg.text)}
                   </div>
 
                   {/* Kartu Rekomendasi Produk di Dalam Chat */}
                   {!isUser && msg.products?.length > 0 && (
                     <div className="w-full space-y-2">
                       {msg.products.map((prod) => {
-                        const waUrl = buildProductOrderWaUrl(
-                          prod.shop,
-                          getEffectiveWa(prod.shop.id, prod.shop.number),
-                          prod,
-                          'Asisten Chatbot Batik Wicara'
+                        const effectiveWa = getEffectiveWa(
+                          prod.shop?.id,
+                          prod.shop?.number
                         );
+                        const waUrl = effectiveWa
+                          ? buildProductOrderWaUrl(
+                              prod.shop,
+                              effectiveWa,
+                              prod,
+                              'Asisten Chatbot Batik Wicara'
+                            )
+                          : '';
+                        const canNavigateCatalog = !prod._isSynthetic && prod.shop?.id;
 
                         return (
                           <div
@@ -145,7 +305,7 @@ export default function BatikChatbotWidget({
                               />
                               <div className="min-w-0 flex-1">
                                 <span className="text-[13px] font-medium text-[#7C3219] block truncate">
-                                  {prod.shop.name}
+                                  {prod.shop?.name || 'Sanggar Batik'}
                                 </span>
                                 <span className="font-serif font-medium text-[15px] text-[#1C1917] block truncate">
                                   {prod.name}
@@ -159,35 +319,45 @@ export default function BatikChatbotWidget({
                             <div className="grid grid-cols-3 gap-1.5">
                               <button
                                 type="button"
+                                disabled={!canNavigateCatalog}
                                 onClick={() => {
+                                  if (!canNavigateCatalog) return;
                                   onOpenBookProduct(prod.shop.id, prod.id);
                                   setIsOpen(false);
                                 }}
-                                className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
+                                className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] disabled:opacity-45 border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed"
                               >
                                 <BookOpen className="w-3.5 h-3.5 text-[#7C3219]" />
                                 <span>Buku</span>
                               </button>
                               <button
                                 type="button"
+                                disabled={!canNavigateCatalog}
                                 onClick={() => {
+                                  if (!canNavigateCatalog) return;
                                   onTryIn3D(prod.id);
                                   setIsOpen(false);
                                 }}
-                                className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer"
+                                className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] disabled:opacity-45 border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed"
                               >
                                 <Layers className="w-3.5 h-3.5 text-[#7C3219]" />
                                 <span>3D</span>
                               </button>
-                              <a
-                                href={waUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="min-h-[38px] px-2 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[13px] font-medium flex items-center justify-center gap-1 transition-colors"
-                              >
-                                <MessageCircle className="w-3.5 h-3.5" />
-                                <span>WA</span>
-                              </a>
+                              {waUrl ? (
+                                <a
+                                  href={waUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="min-h-[38px] px-2 rounded-[10px] bg-[#1D6B44] hover:bg-[#165233] text-white text-[13px] font-medium flex items-center justify-center gap-1 transition-colors"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                  <span>WA</span>
+                                </a>
+                              ) : (
+                                <span className="min-h-[38px] px-2 rounded-[10px] bg-[#EFEAE0] text-[#575049] text-[12px] font-medium flex items-center justify-center">
+                                  No WA
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -199,8 +369,9 @@ export default function BatikChatbotWidget({
             })}
 
             {isTyping && (
-              <div className="inline-block px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/12 text-[13px] text-[#575049] italic">
-                Asisten sedang mengetik...
+              <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-[#FCFBF8] border border-[#1C1917]/12 text-[13px] text-[#575049] italic">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#7C3219]" />
+                <span>Asisten sedang menyiapkan jawaban...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -212,8 +383,9 @@ export default function BatikChatbotWidget({
               <button
                 key={prompt}
                 type="button"
+                disabled={isTyping}
                 onClick={() => handleSendMessage(prompt)}
-                className="shrink-0 min-h-[36px] px-3 py-1 rounded-md bg-[#FCFBF8] hover:bg-white border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] cursor-pointer"
+                className="shrink-0 min-h-[36px] px-3 py-1 rounded-md bg-[#FCFBF8] hover:bg-white disabled:opacity-50 border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] cursor-pointer disabled:cursor-not-allowed"
               >
                 {prompt}
               </button>
@@ -232,9 +404,10 @@ export default function BatikChatbotWidget({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              disabled={isTyping}
               placeholder="Tanya motif, harga, atau sanggar..."
               aria-label="Ketik pertanyaan untuk asisten katalog"
-              className="flex-1 min-h-[44px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917]"
+              className="flex-1 min-h-[44px] px-3 py-2 rounded-md bg-[#F7F4EE] border border-[#1C1917]/20 text-[14px] text-[#1C1917] disabled:opacity-60"
             />
             <button
               type="submit"

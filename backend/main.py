@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
 
+from url_controller import COOKIE_SAMESITE, COOKIE_SECURE
+
 # Load .env dari root project_alpha/.env sebelum import modul internal
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
@@ -19,7 +21,7 @@ from controller import (
     shop_controller,
     storage_controller,
 )
-from middleware import AuthMiddleware, COOKIE_SECURE, service_exception_handler
+from middleware import AuthMiddleware, service_exception_handler
 from service.exceptions import ServiceException
 
 app = FastAPI(title="Project Alpha API", version="1.0.0")
@@ -39,9 +41,7 @@ if not REGISTRATION_SECRET:
 app.add_middleware(
     SessionMiddleware,
     secret_key=REGISTRATION_SECRET,
-    session_cookie="registration_token",
-    max_age=1800,  # 30 menit
-    same_site="lax",
+    same_site=COOKIE_SAMESITE,
     https_only=COOKIE_SECURE,
 )
 

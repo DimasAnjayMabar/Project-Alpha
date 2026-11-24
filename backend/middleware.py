@@ -49,7 +49,7 @@ PUBLIC_READ_EXACT_PATHS = {
     "/shop",
     "/product",
     "/product/categories",
-    "/api/products/search",
+    "/chatbot/products/search",
 }
 
 PUBLIC_READ_PREFIXES = (

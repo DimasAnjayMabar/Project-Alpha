@@ -7,7 +7,8 @@ export function drawProductMotifToCanvas(canvas, product, size = 512) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const theme = resolveVisualTheme(product.name, product.shop_id);
+  const motifHint = `${product.name || ''} ${product.additional_attribute?.motif || ''}`.trim();
+  const theme = resolveVisualTheme(motifHint, product.shop_id);
   const bg = theme.warna_utama;
   const secondary = theme.warna_sekunder;
   const accent = theme.warna_aksen;

@@ -1,9 +1,9 @@
-# main.py
+# harness/main.py
 """
 Controller harness — FastAPI (INTERNAL SERVICE).
 
 Harness ini hanya boleh diakses oleh Backend SQL (port 3002),
-BUKAN oleh FE. Bind ke 127.0.0.1 supaya tidak bisa diakses dari luar host.
+BUKAN oleh FE. Bind ke host lokal (127.0.0.1) supaya tidak bisa diakses langsung dari luar host.
 
 Routes:
     POST /question   → terima query, proses di background, kembalikan job_id
@@ -11,7 +11,7 @@ Routes:
     GET  /health     → health check (tanpa auth, untuk monitoring)
 
 Keamanan:
-    - Bind ke 127.0.0.1
+    - Bind ke 127.0.0.1 (atau host dari HARNESS_BASE_URL)
     - Header X-Internal-Key wajib (kalau INTERNAL_API_KEY diset di .env)
     - CORS hanya untuk Backend SQL
 
@@ -33,6 +33,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from url_controller import (
+    BACKEND_CORS_ORIGINS,
+    BACKEND_MODE,
+    BACKEND_URL,
+    HARNESS_HOST,
+    HARNESS_PORT,
+    INTERNAL_API_KEY,
+)
 from pipeline import get_pipeline, RAGResponse
 
 logger = logging.getLogger("harness.main")
@@ -65,14 +73,11 @@ def _setup_logging():
 # Kalau tidak diset, auth dilewati (untuk development lokal).
 # =========================================================================
 
-_INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "").strip()
-
-
 def _verify_internal_key(x_internal_key: Optional[str] = Header(default=None)):
-    if not _INTERNAL_API_KEY:
+    if not INTERNAL_API_KEY:
         # development mode — auth dilewati
         return
-    if x_internal_key != _INTERNAL_API_KEY:
+    if x_internal_key != INTERNAL_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid internal key.")
 
 
@@ -156,13 +161,10 @@ def _run_job(job_id: str, query: str):
 
 app = FastAPI(title="Batik Harness (internal)", version="1.0.0")
 
-# CORS: hanya Backend SQL (3002) yang boleh hit dari browser.
-# Kalau backend dan harness satu host, CORS tidak terlalu penting,
-# tapi tetap diset untuk keamanan.
-_BACKEND_ORIGIN = os.environ.get("BACKEND_BASE_URL", "http://127.0.0.1:3002").rstrip("/")
+# CORS: hanya origin Backend SQL aktif yang diizinkan (diambil dari url_controller)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[_BACKEND_ORIGIN],
+    allow_origins=BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -272,7 +274,7 @@ def health():
         "status":   "ok",
         "jobs":     len(_jobs),
         "uptime_s": int(time.time() - _START_TIME),
-        "auth":     "on" if _INTERNAL_API_KEY else "off",
+        "auth":     "on" if INTERNAL_API_KEY else "off",
     }
 
 
@@ -288,11 +290,12 @@ def _on_startup():
     _setup_logging()
     logger.info("═" * 60)
     logger.info("Batik Harness — internal FastAPI service")
-    logger.info("Port  : 3001 (bind 127.0.0.1)")
-    logger.info("Backend SQL : %s", _BACKEND_ORIGIN)
+    logger.info("Bind        : http://%s:%d", HARNESS_HOST, HARNESS_PORT)
+    logger.info("Backend SQL : %s (mode=%s)", BACKEND_URL, BACKEND_MODE)
+    logger.info("CORS origins: %s", BACKEND_CORS_ORIGINS)
     logger.info("Ollama      : %s", os.environ.get("OLLAMA_BASE_URL", "(tidak diset)"))
     logger.info("LLM provider: %s", os.environ.get("LLM_PROVIDER", "groq"))
-    if _INTERNAL_API_KEY:
+    if INTERNAL_API_KEY:
         logger.info("Internal auth: AKTIF (X-Internal-Key wajib)")
     else:
         logger.warning("Internal auth: NONAKTIF — jangan pakai di produksi!")
@@ -308,7 +311,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",       # hanya localhost — tidak bisa diakses dari luar
-        port=3001,
+        host=HARNESS_HOST,
+        port=HARNESS_PORT,
         log_level="info",
     )

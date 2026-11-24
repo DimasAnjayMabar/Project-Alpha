@@ -1,3 +1,4 @@
+# backend/service/chatbot_service.py
 import logging
 import os
 import re
@@ -8,15 +9,14 @@ from collections import deque
 import requests
 
 from service.exceptions import ValidationError, ServiceException
+from url_controller import build_harness_url, get_harness_headers
 
 logger = logging.getLogger("backend.chatbot_service")
 
 # ==========================================
-# KONFIGURASI (dari .env)
+# KONFIGURASI
 # ==========================================
-HARNESS_BASE_URL = os.getenv("HARNESS_BASE_URL", "http://127.0.0.1:3001").rstrip("/")
-# Kalau INTERNAL_API_KEY diisi di harness, backend wajib mengirim key yang sama.
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "").strip()
+# .env root sudah dimuat otomatis saat import url_controller
 HARNESS_TIMEOUT = float(os.getenv("HARNESS_TIMEOUT", "10"))  # detik, per request ke harness
 
 MAX_QUERY_LENGTH = 500
@@ -33,10 +33,6 @@ _hits_lock = threading.Lock()
 # ==========================================
 # HELPER
 # ==========================================
-def _harness_headers() -> dict:
-    return {"X-Internal-Key": INTERNAL_API_KEY} if INTERNAL_API_KEY else {}
-
-
 def check_rate_limit(client_id: str) -> None:
     """Batasi jumlah pertanyaan per pengunjung (in-memory)."""
     now = time.time()
@@ -59,12 +55,14 @@ def check_rate_limit(client_id: str) -> None:
 
 
 def _call_harness(method: str, path: str, **kwargs) -> requests.Response:
-    """Panggil harness. Error jaringan diubah jadi ServiceException yang ramah."""
-    url = f"{HARNESS_BASE_URL}{path}"
+    """Panggil harness via url_controller. Error jaringan diubah jadi ServiceException yang ramah."""
+    url = build_harness_url(path)
+    extra_headers = kwargs.pop("headers", None)
     try:
         return requests.request(
-            method, url,
-            headers=_harness_headers(),
+            method,
+            url,
+            headers=get_harness_headers(extra_headers),
             timeout=HARNESS_TIMEOUT,
             **kwargs,
         )

@@ -7,3 +7,4 @@ cache.sqlite
 migration
 node_modules
 dist
+project_alpha.sql

@@ -36,7 +36,7 @@ CONFIG = {
 
     "product_max_new_tokens":   350,
     "product_recommendation_k": 3,
-    "backend_product_path":     "/chathbot/products/search",  # samakan dengan route di backend
+    "backend_product_path":     "/chatbot/products/search",  # samakan dengan route di backend
     "backend_timeout":          10,
 
     "cache_backend":            "sqlite",

@@ -1,14 +1,19 @@
+// frontend/src/seller/utils/sellerService.js
 import { INITIAL_DATABASE } from '../../user/data/databaseSeed';
+import {
+  BACKEND_URL,
+  backendFetch,
+  buildBackendUrl,
+} from '../../utils/url_controller';
 
 export const DB_STORAGE_KEY = 'batik_wicara_db_v1';
 export const SELLER_SESSION_KEY = 'batik_wicara_seller_session_v1';
 
-export const BACKEND_BASE_URL = String(
-  import.meta.env.BACKEND_BASE_URL || 'http://localhost:3002'
-).replace(/\/+$/, '');
+// Alias kompatibilitas ke URL aktif dari url_controller
+export const BACKEND_BASE_URL = BACKEND_URL;
 
 // =========================================================================
-// HELPER PARSE RESPONS BACKEND (PORT 3002 — HTTPONLY COOKIE)
+// HELPER PARSE RESPONS BACKEND (HTTPONLY COOKIE)
 // =========================================================================
 
 async function parseApiResponse(response, fallbackMessage) {
@@ -47,11 +52,11 @@ async function parseApiResponse(response, fallbackMessage) {
 // =========================================================================
 
 export function getGoogleLoginUrl() {
-  return `${BACKEND_BASE_URL}/auth/google/login`;
+  return buildBackendUrl('/auth/google/login');
 }
 
 export async function fetchPendingRegistration() {
-  const response = await fetch(`${BACKEND_BASE_URL}/auth/pending`, {
+  const response = await backendFetch('/auth/pending', {
     method: 'GET',
     credentials: 'include',
   });
@@ -86,7 +91,7 @@ export async function registerSellerShop(shopForm, profileImageFile = null) {
     formData.append('profile_image', profileImageFile);
   }
 
-  const response = await fetch(`${BACKEND_BASE_URL}/shop/register`, {
+  const response = await backendFetch('/shop/register', {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -100,7 +105,7 @@ export async function registerSellerShop(shopForm, profileImageFile = null) {
 }
 
 export async function fetchMyShop() {
-  const response = await fetch(`${BACKEND_BASE_URL}/shop/me`, {
+  const response = await backendFetch('/shop/me', {
     method: 'GET',
     credentials: 'include',
   });
@@ -131,7 +136,7 @@ export async function updateMyShop(
     formData.append('profile_image', profileImageFile);
   }
 
-  const response = await fetch(`${BACKEND_BASE_URL}/shop/me`, {
+  const response = await backendFetch('/shop/me', {
     method: 'PATCH',
     credentials: 'include',
     body: formData,
@@ -145,7 +150,7 @@ export async function updateMyShop(
 }
 
 export async function logoutSeller() {
-  const response = await fetch(`${BACKEND_BASE_URL}/auth/logout`, {
+  const response = await backendFetch('/auth/logout', {
     method: 'POST',
     credentials: 'include',
   });
@@ -153,11 +158,11 @@ export async function logoutSeller() {
 }
 
 // =========================================================================
-// 2. KATEGORI & CRUD PRODUK SELLER (BACKEND 3002 -> STORAGE 3003)
+// 2. KATEGORI & CRUD PRODUK SELLER (BACKEND -> STORAGE)
 // =========================================================================
 
 export async function fetchProductCategories() {
-  const response = await fetch(`${BACKEND_BASE_URL}/product/categories`, {
+  const response = await backendFetch('/product/categories', {
     method: 'GET',
     credentials: 'include',
   });
@@ -179,7 +184,7 @@ export async function fetchMyProducts({
   params.set('page', String(page));
   params.set('limit', String(limit));
 
-  const response = await fetch(`${BACKEND_BASE_URL}/product/me?${params.toString()}`, {
+  const response = await backendFetch(`/product/me?${params.toString()}`, {
     method: 'GET',
     credentials: 'include',
   });
@@ -229,7 +234,7 @@ export async function createSellerProductApi(
     formData.append('mockup_image', mockupFile);
   }
 
-  const response = await fetch(`${BACKEND_BASE_URL}/product`, {
+  const response = await backendFetch('/product', {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -243,7 +248,7 @@ export async function createSellerProductApi(
 }
 
 /**
- * Memperbarui produk + sinkronisasi tambah/hapus gambar di storage 3003 (PATCH /product/{id}).
+ * Memperbarui produk + sinkronisasi tambah/hapus gambar di storage (PATCH /product/{id}).
  */
 export async function updateSellerProductApi(
   productId,
@@ -289,7 +294,7 @@ export async function updateSellerProductApi(
     formData.append('new_mockup_image', newMockupFile);
   }
 
-  const response = await fetch(`${BACKEND_BASE_URL}/product/${productId}`, {
+  const response = await backendFetch(`/product/${productId}`, {
     method: 'PATCH',
     credentials: 'include',
     body: formData,
@@ -303,7 +308,7 @@ export async function updateSellerProductApi(
 }
 
 export async function updateProductStatus(productId, activeStatus) {
-  const response = await fetch(`${BACKEND_BASE_URL}/product/${productId}/status`, {
+  const response = await backendFetch(`/product/${productId}/status`, {
     method: 'PATCH',
     credentials: 'include',
     headers: {
@@ -317,7 +322,7 @@ export async function updateProductStatus(productId, activeStatus) {
 
 export async function deleteSellerProductApi(productId, permanent = true) {
   const params = new URLSearchParams({ permanent: String(Boolean(permanent)) });
-  const response = await fetch(`${BACKEND_BASE_URL}/product/${productId}?${params.toString()}`, {
+  const response = await backendFetch(`/product/${productId}?${params.toString()}`, {
     method: 'DELETE',
     credentials: 'include',
   });
