@@ -14,7 +14,7 @@ UrlMode = Literal["base", "remote"]
 # =========================================================================
 # SWITCH MANUAL: ubah ke "remote" atau "base"
 # =========================================================================
-BACKEND_MODE: UrlMode = "base"  # "remote" | "base"
+BACKEND_MODE: UrlMode = "remote"  # "remote" | "base"
 
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "").strip()
 

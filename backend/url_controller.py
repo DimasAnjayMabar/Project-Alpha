@@ -15,9 +15,9 @@ UrlMode = Literal["base", "remote"]
 # =========================================================================
 # SWITCH MANUAL: ubah masing-masing ke "remote" atau "base"
 # =========================================================================
-BACKEND_PUBLIC_MODE: UrlMode = "base"  # Untuk build_public_media_url & redirect OAuth
-STORAGE_MODE: UrlMode = "base"           # Target server Storage (port 3003)
-HARNESS_MODE: UrlMode = "base"           # Target server Harness (port 3001)
+BACKEND_PUBLIC_MODE: UrlMode = "remote"  # Untuk build_public_media_url & redirect OAuth
+STORAGE_MODE: UrlMode = "remote"           # Target server Storage (port 3003)
+HARNESS_MODE: UrlMode = "remote"           # Target server Harness (port 3001)
 
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 INTERNAL_API_KEY_HEADER = "X-Internal-Key"

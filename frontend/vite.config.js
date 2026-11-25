@@ -7,5 +7,5 @@ export default defineConfig({
   // Baca file .env dari root project_alpha/
   envDir: '..',
   // Batasi variabel yang diekspos ke browser agar secret backend tidak ikut ter-bundle
-  envPrefix: ['VITE_', 'BACKEND_BASE_URL', 'BACKEND_REMOTE_URL'],
+  envPrefix: ['VITE_', 'BACKEND_BASE_URL', 'BACKEND_REMOTE_URL', 'GOOGLE_CLIENT_ID'],
 });

@@ -33,6 +33,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 PUBLIC_EXACT_PATHS = {
     "/auth/google/login",
     "/auth/google/callback",
+    "/auth/google/exchange",
     "/auth/pending",
     "/auth/logout",
     "/shop/register",

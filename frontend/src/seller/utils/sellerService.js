@@ -11,6 +11,9 @@ export const SELLER_SESSION_KEY = 'batik_wicara_seller_session_v1';
 
 // Alias kompatibilitas ke URL aktif dari url_controller
 export const BACKEND_BASE_URL = BACKEND_URL;
+export const GOOGLE_CLIENT_ID = String(import.meta.env.GOOGLE_CLIENT_ID || '').trim();
+
+let gsiScriptPromise = null;
 
 // =========================================================================
 // HELPER PARSE RESPONS BACKEND (HTTPONLY COOKIE)
@@ -53,6 +56,119 @@ async function parseApiResponse(response, fallbackMessage) {
 
 export function getGoogleLoginUrl() {
   return buildBackendUrl('/auth/google/login');
+}
+
+/**
+ * Memastikan script Google Identity Services sudah termuat sebelum tombol diklik.
+ */
+export function preloadGoogleGsiScript() {
+  if (typeof window === 'undefined') return Promise.resolve();
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (gsiScriptPromise) return gsiScriptPromise;
+
+  gsiScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    );
+    if (existing) {
+      if (window.google?.accounts?.oauth2) {
+        resolve();
+        return;
+      }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener(
+        'error',
+        () => reject(new Error('Gagal memuat layanan login Google.')),
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Gagal memuat layanan login Google.'));
+    document.head.appendChild(script);
+  });
+
+  return gsiScriptPromise;
+}
+
+/**
+ * Menukar authorization code Google ke backend via backendFetch
+ * (otomatis membawa header ngrok-skip-browser-warning dan cookie HttpOnly).
+ */
+export async function exchangeGoogleAuthCode(code) {
+  const response = await backendFetch('/auth/google/exchange', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  const payload = await parseApiResponse(
+    response,
+    'Autentikasi Google gagal diproses oleh server.'
+  );
+
+  return {
+    status: payload?.status || 'success', // 'success' | 'need_registration'
+    data: payload?.data || null,
+  };
+}
+
+/**
+ * Membuka popup login Google secara sinkron dalam event click (scope ketat: openid email).
+ */
+export function openGoogleCodePopup({ onCode, onError, onCancel }) {
+  if (!GOOGLE_CLIENT_ID) {
+    onError?.('GOOGLE_CLIENT_ID belum dikonfigurasi di frontend.');
+    return;
+  }
+
+  const oauth2 = window.google?.accounts?.oauth2;
+  if (!oauth2) {
+    onError?.('Layanan Google masih dimuat. Tunggu sebentar lalu klik kembali.');
+    preloadGoogleGsiScript().catch(() => {});
+    return;
+  }
+
+  const client = oauth2.initCodeClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'openid email',
+    ux_mode: 'popup',
+    select_account: true,
+    callback: (resp) => {
+      if (resp?.error) {
+        if (resp.error === 'access_denied') {
+          onCancel?.();
+        } else {
+          onError?.('Proses masuk dengan Google dibatalkan atau gagal. Silakan coba kembali.');
+        }
+        return;
+      }
+      if (!resp?.code) {
+        onError?.('Kode autentikasi dari Google tidak diterima.');
+        return;
+      }
+      onCode?.(resp.code);
+    },
+    error_callback: (err) => {
+      if (err?.type === 'popup_closed') {
+        onCancel?.();
+      } else if (err?.type === 'popup_failed_to_open') {
+        onError?.('Popup Google diblokir oleh browser. Izinkan popup untuk situs ini lalu coba lagi.');
+      } else {
+        onError?.('Gagal membuka jendela login Google. Silakan coba lagi.');
+      }
+    },
+  });
+
+  client.requestCode();
 }
 
 export async function fetchPendingRegistration() {
@@ -331,7 +447,7 @@ export async function deleteSellerProductApi(productId, permanent = true) {
 }
 
 // =========================================================================
-// 3. HELPER LOCALSTORAGE LAMA (SEMENTARA UNTUK /user DI App.jsx HINGGA TAHAP 3)
+// 3. HELPER LOCALSTORAGE LAMA (KOMPATIBILITAS)
 // =========================================================================
 
 export function loadSharedDatabase() {

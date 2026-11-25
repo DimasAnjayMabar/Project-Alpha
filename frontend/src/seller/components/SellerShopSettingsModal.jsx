@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Store, Upload, Trash2, RotateCcw, AlertCircle, Loader2 } from 'lucide-react';
+import { useBackendMediaUrl } from '../../utils/useBackendMediaUrl';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB (selaras dengan storage/config.py)
@@ -36,7 +37,14 @@ export default function SellerShopSettingsModal({ isOpen, onClose, shop, onSaveS
 
   if (!isOpen || !shop) return null;
 
-  const existingLogoUrl = !existingImgError ? shop.profile_public_url || '' : '';
+  const { src: resolvedExistingLogo, failed: existingLogoFailed } = useBackendMediaUrl(
+    isOpen ? shop?.profile_public_url : ''
+  );
+
+  if (!isOpen || !shop) return null;
+
+  const existingLogoUrl =
+    !existingImgError && !existingLogoFailed ? resolvedExistingLogo : '';
   const displayedLogoUrl = logoPreviewUrl || (removeProfile ? '' : existingLogoUrl);
   const hasVisibleLogo = Boolean(displayedLogoUrl);
 

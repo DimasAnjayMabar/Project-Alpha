@@ -18,8 +18,8 @@ UrlMode = Literal["base", "remote"]
 # URL CONTROLLER TERPUSAT (SWITCH MANUAL — TANPA FALLBACK)
 # Ubah masing-masing ke "remote" atau "base" sesuai kebutuhan
 # =========================================================================
-STORAGE_MODE: UrlMode = "base"   # "base" | "remote" (identitas/URL publik storage)
-BACKEND_MODE: UrlMode = "base"   # "base" | "remote" (origin backend untuk CORS)
+STORAGE_MODE: UrlMode = "remote"   # "base" | "remote" (identitas/URL publik storage)
+BACKEND_MODE: UrlMode = "remote"   # "base" | "remote" (origin backend untuk CORS)
 
 # Raw URL dari .env root
 STORAGE_BASE_URL = os.getenv("STORAGE_BASE_URL", "http://localhost:3003").rstrip("/")

@@ -3,7 +3,7 @@
 // =========================================================================
 // SWITCH MANUAL: ubah ke 'remote' atau 'base'
 // =========================================================================
-export const BACKEND_MODE = 'base'; // 'remote' | 'base'
+export const BACKEND_MODE = 'remote'; // 'remote' | 'base'
 
 const URL_MAP = {
   base: String(import.meta.env.BACKEND_BASE_URL || 'http://localhost:3002').replace(/\/+$/, ''),

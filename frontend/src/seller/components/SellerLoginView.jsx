@@ -6,7 +6,11 @@ import {
   CheckCircle2,
   Loader2,
 } from 'lucide-react';
-import { getGoogleLoginUrl } from '../utils/sellerService';
+import {
+  preloadGoogleGsiScript,
+  openGoogleCodePopup,
+  exchangeGoogleAuthCode,
+} from '../utils/sellerService';
 
 const ERROR_MESSAGES = {
   oauth_failed:
@@ -40,11 +44,13 @@ function GoogleMark() {
   );
 }
 
-export default function SellerLoginView({ onBackToCatalog }) {
+export default function SellerLoginView({ onBackToCatalog, onLoginSuccess }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
+    preloadGoogleGsiScript().catch(() => {});
+
     const params = new URLSearchParams(window.location.search);
     const errorCode = params.get('error');
     if (errorCode) {
@@ -59,7 +65,36 @@ export default function SellerLoginView({ onBackToCatalog }) {
   const handleGoogleLogin = () => {
     setErrorMsg('');
     setIsRedirecting(true);
-    window.location.href = getGoogleLoginUrl();
+
+    openGoogleCodePopup({
+      onCode: async (code) => {
+        try {
+          const result = await exchangeGoogleAuthCode(code);
+          if (result.status === 'need_registration') {
+            // Navigasi lokal ke halaman frontend /register (tidak melewati ngrok)
+            window.location.assign('/register');
+            return;
+          }
+          if (onLoginSuccess) {
+            onLoginSuccess();
+          } else {
+            window.location.assign('/seller');
+          }
+        } catch (err) {
+          setErrorMsg(
+            err?.message || 'Gagal menyelesaikan autentikasi Google. Silakan coba kembali.'
+          );
+          setIsRedirecting(false);
+        }
+      },
+      onError: (msg) => {
+        setErrorMsg(msg);
+        setIsRedirecting(false);
+      },
+      onCancel: () => {
+        setIsRedirecting(false);
+      },
+    });
   };
 
   return (
@@ -197,3 +232,4 @@ export default function SellerLoginView({ onBackToCatalog }) {
     </div>
   );
 }
+

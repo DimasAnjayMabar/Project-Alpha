@@ -12,11 +12,20 @@ import {
 } from 'lucide-react';
 import ProductArtwork from '../../user/components/ProductArtwork';
 import { formatAttributeLabel } from '../../user/utils/helpers';
+import { useBackendMediaUrl } from '../../utils/useBackendMediaUrl';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const MAX_DISPLAY_FILES_PER_REQUEST = 10;
 const MAX_DISPLAY_SIZE_BYTES = 5 * 1024 * 1024;  // 5 MB per gambar display
 const MAX_MOCKUP_SIZE_BYTES = 15 * 1024 * 1024;  // 15 MB untuk mockup 3D WebP lossless
+
+function BackendImg({ src, alt, className = '' }) {
+  const { src: resolvedSrc } = useBackendMediaUrl(src);
+  if (!resolvedSrc) {
+    return <div className={`bg-[#EFEAE0] ${className}`} aria-hidden="true" />;
+  }
+  return <img src={resolvedSrc} alt={alt} className={className} />;
+}
 
 export default function SellerProductFormModal({
   isOpen,
@@ -549,7 +558,7 @@ export default function SellerProductFormModal({
                     key={img.id}
                     className="relative group aspect-square rounded-md overflow-hidden border border-[#1C1917]/15 bg-[#F7F4EE]"
                   >
-                    <img
+                    <BackendImg
                       src={img.public_url}
                       alt={`Foto eksisting ${idx + 1}`}
                       className="w-full h-full object-cover"
@@ -601,7 +610,7 @@ export default function SellerProductFormModal({
           <div className="p-4 rounded-lg bg-[#FCFBF8] border border-[#1C1917]/12 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="w-20 h-20 rounded-md border border-[#1C1917]/15 bg-[#EFEAE0] overflow-hidden flex items-center justify-center shrink-0">
               {displayedMockupUrl ? (
-                <img
+                <BackendImg
                   src={displayedMockupUrl}
                   alt="Pratinjau tekstur mockup 3D"
                   className="w-full h-full object-cover"

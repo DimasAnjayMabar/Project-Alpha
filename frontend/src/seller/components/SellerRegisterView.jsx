@@ -10,9 +10,13 @@ import {
   Store,
   ShieldCheck,
 } from 'lucide-react';
+
+// Ganti import dari sellerService:
 import {
   fetchPendingRegistration,
-  getGoogleLoginUrl,
+  preloadGoogleGsiScript,
+  openGoogleCodePopup,
+  exchangeGoogleAuthCode,
   registerSellerShop,
 } from '../utils/sellerService';
 
@@ -150,7 +154,26 @@ export default function SellerRegisterView({ onRegisterSuccess, onBackToCatalog 
   };
 
   const handleRestartGoogleLogin = () => {
-    window.location.href = getGoogleLoginUrl();
+    setErrorMsg('');
+    openGoogleCodePopup({
+      onCode: async (code) => {
+        try {
+          const result = await exchangeGoogleAuthCode(code);
+          if (result.status === 'need_registration' && result.data?.email) {
+            setPendingEmail(result.data.email);
+            setSessionInvalidMsg('');
+            return;
+          }
+          onRegisterSuccess();
+        } catch (err) {
+          setSessionInvalidMsg(
+            err?.message || 'Gagal memulai ulang sesi Google. Silakan coba lagi.'
+          );
+        }
+      },
+      onError: (msg) => setSessionInvalidMsg(msg),
+      onCancel: () => {},
+    });
   };
 
   return (

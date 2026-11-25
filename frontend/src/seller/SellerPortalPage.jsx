@@ -40,18 +40,20 @@ import {
 import SellerLoginView from './components/SellerLoginView';
 import SellerProductFormModal from './components/SellerProductFormModal';
 import SellerShopSettingsModal from './components/SellerShopSettingsModal';
+import { useBackendMediaUrl } from '../utils/useBackendMediaUrl';
 
 function ShopAvatar({ src, name, sizeClass = 'w-10 h-10', iconClass = 'w-5 h-5' }) {
+  const { src: resolvedSrc, failed } = useBackendMediaUrl(src);
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     setImgError(false);
-  }, [src]);
+  }, [resolvedSrc]);
 
-  if (src && !imgError) {
+  if (resolvedSrc && !failed && !imgError) {
     return (
       <img
-        src={src}
+        src={resolvedSrc}
         alt={`Logo ${name || 'Sanggar'}`}
         onError={() => setImgError(true)}
         className={`${sizeClass} rounded-md object-cover border border-[#C4A46B]/40 bg-[#EFEAE0] shrink-0`}
@@ -421,8 +423,14 @@ export default function SellerPortalPage({ onOpenUserCatalog }) {
   }
 
   // 3. Belum login (401 dari GET /shop/me)
+  // 3. Belum login (401 dari GET /shop/me)
   if (authStatus === 'unauthenticated' || !shop) {
-    return <SellerLoginView onBackToCatalog={() => onOpenUserCatalog(null)} />;
+    return (
+      <SellerLoginView
+        onBackToCatalog={() => onOpenUserCatalog(null)}
+        onLoginSuccess={() => loadDashboardData()}
+      />
+    );
   }
 
   const activeCount = myProducts.filter((p) => p.active_status !== false).length;
