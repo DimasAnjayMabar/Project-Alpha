@@ -150,6 +150,16 @@ export async function fetchChatbotAnswer(jobId, { signal } = {}) {
 // 2. PEMETAAN REKOMENDASI PRODUK KE KARTU KATALOG FRONTEND
 // =========================================================================
 
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasExactPhrase(haystack, needle) {
+  if (!haystack || !needle) return false;
+  const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(needle)}([^a-z0-9]|$)`, 'i');
+  return pattern.test(haystack);
+}
+
 function mapSourceItemToProduct(src, enrichedProducts) {
   if (!src || typeof src !== 'object') return null;
 
@@ -159,18 +169,30 @@ function mapSourceItemToProduct(src, enrichedProducts) {
     if (byId) return byId;
   }
 
-  // Prioritas 2: Cocokkan berdasarkan nama motif/produk & nama UMKM
-  const srcName = String(src.nama_motif || src.name || '').toLowerCase();
-  const srcShop = String(src.nama_umkm || '').toLowerCase();
+  // Prioritas 2: Exact match nama produk dulu, lalu batas kata (urut nama terpanjang dulu)
+  const srcName = String(src.name || src.nama_motif || '').trim().toLowerCase();
+  const srcShop = String(src.nama_umkm || '').trim().toLowerCase();
+
   if (srcName) {
-    const byName = enrichedProducts.find((p) => {
-      const prodName = String(p.name || '').toLowerCase();
-      const shopName = String(p.shop?.name || '').toLowerCase();
-      const nameHit = srcName.includes(prodName) || prodName.includes(srcName);
-      const shopHit = !srcShop || shopName.includes(srcShop) || srcShop.includes(shopName);
-      return nameHit && shopHit;
+    const sorted = [...enrichedProducts].sort(
+      (a, b) => String(b.name || '').length - String(a.name || '').length
+    );
+
+    const exactHit = sorted.find((p) => {
+      const prodName = String(p.name || '').trim().toLowerCase();
+      const shopName = String(p.shop?.name || '').trim().toLowerCase();
+      const shopOk = !srcShop || shopName === srcShop || shopName.includes(srcShop);
+      return prodName === srcName && shopOk;
     });
-    if (byName) return byName;
+    if (exactHit) return exactHit;
+
+    const boundaryHit = sorted.find((p) => {
+      const prodName = String(p.name || '').trim().toLowerCase();
+      const shopName = String(p.shop?.name || '').trim().toLowerCase();
+      const shopOk = !srcShop || shopName.includes(srcShop) || srcShop.includes(shopName);
+      return shopOk && (hasExactPhrase(srcName, prodName) || hasExactPhrase(prodName, srcName));
+    });
+    if (boundaryHit) return boundaryHit;
   }
 
   // Prioritas 3: Bentuk kartu produk dari metadata source harness jika belum ada di state lokal
@@ -178,8 +200,8 @@ function mapSourceItemToProduct(src, enrichedProducts) {
     return {
       id: String(src.id || `chat-prod-${src.nama_motif}`),
       shop_id: String(src.shop_id || ''),
-      name: src.nama_motif || 'Koleksi Batik',
-      price: Number(src.harga_per_meter) || 0,
+      name: src.name || src.nama_motif || 'Koleksi Batik',
+      price: Number(src.harga ?? src.harga_per_meter) || 0,
       primaryImageUrl: src.thumbnail_url || '',
       formattedAttributes: [],
       category: { name: 'Batik' },
@@ -197,6 +219,10 @@ function mapSourceItemToProduct(src, enrichedProducts) {
 }
 
 function resolveRecommendedProducts({ intent, answer, sources, enrichedProducts = [] }) {
+  // Hanya tampilkan kartu untuk intent rekomendasi/pencarian ('product'),
+  // bukan konfirmasi/detail ('product_detail'), knowledge, atau social
+  if (intent !== 'product') return [];
+
   const result = [];
   const seenIds = new Set();
 
@@ -214,13 +240,16 @@ function resolveRecommendedProducts({ intent, answer, sources, enrichedProducts 
     });
   }
 
-  // 2. Fallback: bila intent === 'product' tapi `sources` tidak ikut di-forward backend,
-  //    cocokkan nama produk katalog yang disebut di dalam teks jawaban asisten
-  if (result.length === 0 && intent === 'product' && answer) {
+  // 2. Fallback: bila `sources` tidak ikut di-forward backend, cocokkan nama terpanjang dulu
+  if (result.length === 0 && answer) {
     const answerLower = String(answer).toLowerCase();
-    enrichedProducts.forEach((prod) => {
+    const sorted = [...enrichedProducts].sort(
+      (a, b) => String(b.name || '').length - String(a.name || '').length
+    );
+
+    sorted.forEach((prod) => {
       const prodName = String(prod.name || '').trim().toLowerCase();
-      if (prodName.length >= 4 && answerLower.includes(prodName)) {
+      if (prodName.length >= 4 && hasExactPhrase(answerLower, prodName)) {
         pushUnique(prod);
       }
     });

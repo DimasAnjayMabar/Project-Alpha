@@ -833,6 +833,10 @@ def get_public_product_by_id(db: Session, product_id: str | UUID) -> dict:
 # ADAPTOR SEARCH UNTUK HARNESS CHATBOT (PORT 3001)
 # =========================================================================
 
+# =========================================================================
+# ADAPTOR SEARCH UNTUK HARNESS CHATBOT (PORT 3001)
+# =========================================================================
+
 def search_products_for_harness(
     db: Session,
     keyword: Optional[str] = None,
@@ -842,13 +846,13 @@ def search_products_for_harness(
 ) -> List[dict]:
     """
     Adaptor pencarian produk khusus harness/pipeline.py.
-    Mengembalikan list datar dengan field yang dibaca _format_products_for_llm.
+    Mengembalikan list datar lengkap dengan deskripsi & additional_attribute.
     """
     result = search_public_products(
         db=db,
         q=keyword,
         motif=motif,
-        category_slug=DEFAULT_CATEGORY_SLUG,
+        category_slug=None,
         max_price=max_harga,
         sort_by="price_asc" if max_harga is not None else "newest",
         page=1,
@@ -864,22 +868,34 @@ def search_products_for_harness(
 
         motif_val = attrs.get("motif")
         nama_tampil = item["name"]
-        if motif_val and motif_val.lower() not in nama_tampil.lower():
+        if motif_val and str(motif_val).lower() not in nama_tampil.lower():
             nama_tampil = f"{nama_tampil} (Motif {motif_val})"
 
+        harga_int = int(round(item["price"]))
+
         formatted.append({
-            # Field wajib untuk _format_products_for_llm di harness/pipeline.py
+            # Field kompatibilitas untuk pipeline & kartu frontend
             "nama_motif": nama_tampil,
+            "name": item["name"],
             "nama_umkm": shop.get("name") or "-",
-            "harga_per_meter": int(round(item["price"])),
+            "harga": harga_int,
+            "harga_per_meter": harga_int,
             "kontak_wa": shop.get("number") or "-",
             "alamat": shop.get("address") or "-",
-            # Metadata tambahan untuk sources chatbot di frontend
-            "id": item["id"],
-            "shop_id": item["shop_id"],
+            # Spesifikasi lengkap & deskripsi untuk Q&A CS
+            "description": (item.get("description") or "").strip(),
+            "additional_attribute": attrs,
             "motif": motif_val,
             "teknik": attrs.get("teknik"),
             "bahan": attrs.get("bahan"),
+            "bentuk": attrs.get("bentuk"),
+            "panjang_cm": attrs.get("panjang_cm"),
+            "lebar_cm": attrs.get("lebar_cm"),
+            "berat_gram": attrs.get("berat_gram"),
+            "pewarna_alami": attrs.get("pewarna_alami"),
+            # Metadata tambahan untuk sources chatbot di frontend
+            "id": item["id"],
+            "shop_id": item["shop_id"],
             "product_link": item.get("product_link"),
             "thumbnail_url": display_imgs[0]["public_url"] if display_imgs else None,
             "mockup_url": mockup_img.get("public_url"),
