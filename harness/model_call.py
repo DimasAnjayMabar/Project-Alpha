@@ -1,29 +1,10 @@
-# model_call.py
-"""
-LLM abstraction layer untuk harness.
-
-Tujuan:
-  - pipeline.py TIDAK memanggil Groq/Ollama secara langsung.
-  - Ganti provider (groq ↔ ollama) cukup lewat config, tanpa ubah pipeline.
-  - Interface seragam: generate(messages, temperature, top_p, max_tokens) -> str
-
-Provider yang didukung saat ini:
-  - "groq"   → Groq API (sekarang dipakai)
-  - "ollama" → Ollama server lokal (nanti, misal http://localhost:11434)
-
-Cara pakai di pipeline.py:
-    from model_call import get_llm
-    llm = get_llm()
-    answer = llm.generate(messages, temperature=0.2, top_p=0.95, max_tokens=1024)
-"""
-
 from __future__ import annotations
 
 import logging
 import os
+import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
-import threading
 from typing import Dict, List, Optional
 
 import requests
@@ -36,6 +17,25 @@ from config import CONFIG  # noqa: E402
 load_dotenv(ROOT_DIR / ".env")
 
 logger = logging.getLogger("harness.model_call")
+
+_EN_REFUSALS = (
+    "i'm sorry, but i can't help with that",
+    "i am sorry, but i cannot help with that",
+    "i cannot assist with that",
+    "i can't assist with that",
+)
+
+_ID_REFUSAL_MESSAGE = (
+    "Maaf, saya tidak dapat membantu permintaan tersebut. "
+    "Saya hanya melayani pertanyaan seputar batik Trenggalek dan katalog produk kami."
+)
+
+
+def _normalize_refusal_language(text: str) -> str:
+    cleaned = (text or "").strip()
+    if cleaned.lower().rstrip(".!") in _EN_REFUSALS:
+        return _ID_REFUSAL_MESSAGE
+    return cleaned
 
 
 # =========================================================================
@@ -61,7 +61,6 @@ class BaseLLM(ABC):
 # GROQ
 # =========================================================================
 
-# model_call.py — tambahkan `import threading` di bagian atas
 class GroqLLM(BaseLLM):
     def __init__(self, model: str, api_key: Optional[str] = None):
         from groq import Groq
@@ -116,7 +115,8 @@ class GroqLLM(BaseLLM):
                     resp.usage.completion_tokens,
                     resp.usage.total_tokens,
                 )
-            return resp.choices[0].message.content or ""
+            content = resp.choices[0].message.content or ""
+            return _normalize_refusal_language(content)
         except Exception as e:
             logger.error("[Groq] generate gagal: %s", e)
             return "Maaf, terjadi kesalahan saat memproses jawaban."
@@ -124,10 +124,6 @@ class GroqLLM(BaseLLM):
 
 # =========================================================================
 # OLLAMA
-# =========================================================================
-# Ollama mengekspos endpoint OpenAI-compatible di /v1/chat/completions.
-# Jadi kita bisa pakai `requests` biasa (atau openai client dengan base_url).
-# Di sini pakai `requests` supaya tidak menambah dependensi.
 # =========================================================================
 
 class OllamaLLM(BaseLLM):
@@ -166,7 +162,8 @@ class OllamaLLM(BaseLLM):
             r = requests.post(url, json=payload, timeout=self.timeout)
             r.raise_for_status()
             data = r.json()
-            return data["choices"][0]["message"]["content"] or ""
+            content = data["choices"][0]["message"]["content"] or ""
+            return _normalize_refusal_language(content)
         except requests.exceptions.RequestException:
             logger.exception("[Ollama] request gagal ke %s", url)
             return "Maaf, LLM lokal sedang tidak tersedia."

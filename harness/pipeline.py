@@ -791,6 +791,8 @@ class HarnessPipeline:
         # Hapus nominal harga (misal 150k, 150rb, rp150.000, 150000) agar tidak mengotori keyword
         cleaned = re.sub(r"\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta)\b", " ", cleaned)
         cleaned = re.sub(r"\b(?:rp\.?\s*)?\d{4,}\b", " ", cleaned)
+        # Hapus angka ukuran/berat (misal 40cm, 2m, 2.4m, 350gr, 350gram)
+        cleaned = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:cm|mm|m|meter|gr|gram|kg)\b", " ", cleaned)
 
         raw_tokens = re.findall(r"[a-z0-9]+", cleaned)
         kept_tokens = [t for t in raw_tokens if t not in cls._FILTER_STOPWORDS]
