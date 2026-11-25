@@ -5,9 +5,17 @@
 // =========================================================================
 export const BACKEND_MODE = 'remote'; // 'remote' | 'base'
 
+const RAW_REMOTE_URL = String(import.meta.env.BACKEND_REMOTE_URL || '').replace(/\/+$/, '');
+
+// Saat dev di browser (npm run dev), lewatkan via Vite proxy agar cookie menjadi First-Party
+const EFFECTIVE_REMOTE_URL =
+  import.meta.env.DEV && typeof window !== 'undefined' && RAW_REMOTE_URL
+    ? `${window.location.origin}/_remote_backend`
+    : RAW_REMOTE_URL;
+
 const URL_MAP = {
   base: String(import.meta.env.BACKEND_BASE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
-  remote: String(import.meta.env.BACKEND_REMOTE_URL || '').replace(/\/+$/, ''),
+  remote: EFFECTIVE_REMOTE_URL,
 };
 
 if (!URL_MAP[BACKEND_MODE]) {
@@ -26,6 +34,7 @@ const KNOWN_BACKEND_BASES = Array.from(
       URL_MAP.base,
       URL_MAP.base.replace('://localhost:', '://127.0.0.1:'),
       URL_MAP.base.replace('://127.0.0.1:', '://localhost:'),
+      RAW_REMOTE_URL,
       URL_MAP.remote,
     ].filter(Boolean)
   )
