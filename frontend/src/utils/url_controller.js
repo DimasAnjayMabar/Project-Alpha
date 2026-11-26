@@ -3,13 +3,12 @@
 // =========================================================================
 // SWITCH MANUAL: ubah ke 'remote' atau 'base'
 // =========================================================================
-export const BACKEND_MODE = 'remote'; // 'remote' | 'base'
+export const BACKEND_MODE = 'remote';
 
 const RAW_REMOTE_URL = String(import.meta.env.BACKEND_REMOTE_URL || '').replace(/\/+$/, '');
 
-// Saat dev di browser (npm run dev), lewatkan via Vite proxy agar cookie menjadi First-Party
 const EFFECTIVE_REMOTE_URL =
-  import.meta.env.DEV && typeof window !== 'undefined' && RAW_REMOTE_URL
+  typeof window !== 'undefined' && RAW_REMOTE_URL
     ? `${window.location.origin}/_remote_backend`
     : RAW_REMOTE_URL;
 

@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/_remote_backend/:path*",
+      "destination": "https://notable-explicitly-mayfly.ngrok-free.app/backend/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

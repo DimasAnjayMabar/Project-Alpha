@@ -1,4 +1,19 @@
 # harness/pipeline.py
+"""
+Unified DB-First RAG Pipeline.
+
+Alur:
+    1. Query masuk
+    2. NLP preprocessing (normalisasi, deteksi bahasa, social check,
+       ekstraksi filter harga, deteksi rujukan konteks sebelumnya & tipe permintaan)
+    3. Cek nama barang / toko / motif ke DB (atau konteks produk sebelumnya)
+    4. Retrieve data resmi dari DB (+ pengetahuan pelengkap ChromaDB hanya bila perlu)
+    5. Rerank kandidat menggunakan CrossEncoder (BAAI/bge-reranker-v2-m3)
+    6. Rangkum dengan LLM (1x call, bahasa dikunci sesuai bahasa query)
+    7. Output RAGResponse (intent="product" + sources untuk card rekomendasi;
+       intent="product_detail" / "knowledge" tanpa spam card untuk detail & edukasi)
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +23,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import chromadb
 import requests
@@ -52,14 +67,15 @@ SOCIAL_TOP_P         = float(CONFIG["social_top_p"])
 
 PRODUCT_MAX_TOKENS   = int(CONFIG.get("product_max_new_tokens", 350))
 
-# ── Backend e-commerce (product recommendation) ─────────────────────────
-BACKEND_PRODUCT_PATH = CONFIG.get("backend_product_path", "/chatbot/products/search")
-BACKEND_TIMEOUT      = int(CONFIG.get("backend_timeout", 10))
-PRODUCT_K            = int(CONFIG.get("product_recommendation_k", 5))
+# ── Backend e-commerce (Single Source of Truth) ─────────────────────────
+BACKEND_PRODUCT_PATH  = CONFIG.get("backend_product_path", "/chatbot/products/search")
+BACKEND_TIMEOUT       = int(CONFIG.get("backend_timeout", 10))
+PRODUCT_K             = int(CONFIG.get("product_recommendation_k", 3))
+BACKEND_MAX_LIMIT     = 20  # Sesuai validasi Query(..., le=20) di backend
 
 
 # =========================================================================
-# FALLBACK PROMPTS (dipakai untuk intent social atau jika koleksi kosong)
+# FALLBACK PROMPTS
 # =========================================================================
 
 _FALLBACK_GUARD_RAILS = (
@@ -69,8 +85,7 @@ _FALLBACK_GUARD_RAILS = (
 )
 
 _FALLBACK_INSTRUCTIONS = (
-    "Jawab dengan bahasa yang ramah, natural, dan jelas. "
-    "Gunakan Bahasa Indonesia kecuali pengguna bertanya dalam bahasa lain."
+    "Jawab dengan bahasa yang ramah, natural, dan jelas seperti CS manusia."
 )
 
 
@@ -83,6 +98,8 @@ class CandidateChunk:
     isi_id:       str
     konten_chunk: str
     vector_score: float
+    source_type:  str = "knowledge_base"  # "db" | "knowledge_base"
+    product_data: Optional[Dict] = None
 
 
 @dataclass
@@ -91,6 +108,25 @@ class RerankedChunk:
     konten_chunk: str
     vector_score: float
     rerank_score: float
+    source_type:  str = "knowledge_base"
+    product_data: Optional[Dict] = None
+
+
+@dataclass
+class QueryAnalysis:
+    raw:                  str
+    normalized:           str
+    tokens:               List[str]
+    token_set:            set
+    language:             str           # "id" | "en"
+    is_social:            bool
+    wants_recommendation: bool
+    is_product_spec:      bool
+    is_knowledge_ask:     bool
+    has_back_reference:   bool
+    ordinal_index:        Optional[int]
+    max_harga:            Optional[int]
+    keyword_candidate:    str
 
 
 @dataclass
@@ -148,7 +184,7 @@ class HarnessModels:
 
 
 # =========================================================================
-# CHROMA RETRIEVER
+# CHROMA RETRIEVER (pelengkap pengetahuan umum)
 # =========================================================================
 
 class ChromaRetriever:
@@ -158,17 +194,31 @@ class ChromaRetriever:
             path=CHROMA_PATH,
             settings=Settings(anonymized_telemetry=False),
         )
-        self.collection = self.client.get_collection(CHROMA_COLLECTION)
-        logger.info(
-            "ChromaDB ready — '%s' (%d dokumen)",
-            CHROMA_COLLECTION, self.collection.count(),
-        )
+        try:
+            self.collection = self.client.get_collection(CHROMA_COLLECTION)
+            logger.info(
+                "ChromaDB ready — '%s' (%d dokumen)",
+                CHROMA_COLLECTION, self.collection.count(),
+            )
+        except Exception:
+            self.collection = None
+            logger.warning(
+                "ChromaDB koleksi '%s' tidak ditemukan — berjalan hanya dengan DB + rules",
+                CHROMA_COLLECTION,
+            )
 
     def retrieve(self, query_embedding: List[float], k: int) -> List[CandidateChunk]:
+        if self.collection is None or k <= 0:
+            return []
+
         try:
+            total = self.collection.count()
+            if total == 0:
+                return []
+
             results = self.collection.query(
                 query_embeddings=[query_embedding],
-                n_results=k,
+                n_results=min(k, total),
                 include=["documents", "metadatas", "distances"],
             )
         except Exception:
@@ -186,6 +236,7 @@ class ChromaRetriever:
                 isi_id=meta.get("source_stem", doc_id) or doc_id,
                 konten_chunk=results["documents"][0][i],
                 vector_score=dist,
+                source_type="knowledge_base",
             ))
         return out
 
@@ -195,7 +246,6 @@ class ChromaRetriever:
 # =========================================================================
 
 def _get_optional_collection(client: chromadb.ClientAPI, name: str):
-    """Ambil handle koleksi ChromaDB jika tersedia, atau None bila belum ada."""
     try:
         col = client.get_collection(name)
         logger.info("[Rules] Koleksi '%s' siap (%d chunk)", name, col.count())
@@ -211,18 +261,13 @@ def _get_optional_collection(client: chromadb.ClientAPI, name: str):
 
 class HarnessPipeline:
     """
-    Pipeline utama harness.
-
-    Tidak ada route di sini. Pemanggilan dari main.py:
-        pipeline = get_pipeline()
-        response = pipeline.answer(query)
+    Pipeline terpadu (NLP -> DB entity/context check -> Unified Rerank -> LLM).
     """
 
     def __init__(self):
         self.models = HarnessModels.get()
         self.chroma = ChromaRetriever()
 
-        # Simpan handle koleksi aturan saja (diambil top-k per query)
         self.instruction_col = _get_optional_collection(
             self.chroma.client, INSTRUCTION_COLLECTION
         )
@@ -230,14 +275,17 @@ class HarnessPipeline:
             self.chroma.client, GUARDRAILS_COLLECTION
         )
 
-        logger.info(
-            "[Pipeline] Rule retrieval aktif — instruction_k=%d, guard_rails_k=%d",
-            INSTRUCTION_K, GUARDRAILS_K,
-        )
+        # Memori ringan konteks produk terakhir per session_id
+        self._session_last_products: Dict[str, List[Dict]] = {}
+        self._max_sessions = 200
 
-        # ── Cache LLM (sqlite / redis, dipilih via config) ─────────────
         self.cache = get_cache(CONFIG, harness_dir=Path(__file__).resolve().parent)
         self._cache_last_cleanup = time.time()
+
+        logger.info(
+            "[Pipeline] Siap — instruction_k=%d, guard_rails_k=%d, product_k=%d",
+            INSTRUCTION_K, GUARDRAILS_K, PRODUCT_K,
+        )
 
     def close(self):
         if getattr(self, "cache", None):
@@ -246,24 +294,539 @@ class HarnessPipeline:
             except Exception:
                 pass
 
-    # ── Rule retrieval ─────────────────────────────────────────────────
+    def _maybe_cleanup_cache(self):
+        now = time.time()
+        if now - self._cache_last_cleanup > 600:
+            self._cache_last_cleanup = now
+            self.cache.cleanup()
+
+    def _remember_products(self, session_id: str, products: List[Dict]):
+        if not products:
+            return
+        if len(self._session_last_products) >= self._max_sessions:
+            oldest_key = next(iter(self._session_last_products))
+            self._session_last_products.pop(oldest_key, None)
+        self._session_last_products[session_id] = products[:PRODUCT_K]
+
+    # =====================================================================
+    # STEP 1: NLP PREPROCESSING & ANALISIS QUERY
+    # =====================================================================
+
+    _SOCIAL_PHRASES = {
+        "selamat pagi", "selamat siang", "selamat sore", "selamat malam",
+        "terima kasih", "makasih banyak", "apa kabar", "sugeng rawuh",
+        "sugeng enjang", "sampai jumpa", "dadah", "permisi", "thank you",
+    }
+    _SOCIAL_WORDS = {
+        "halo", "hai", "hello", "hi", "hey", "hei", "pagi", "siang",
+        "sore", "malam", "makasih", "thanks", "thank", "oke", "ok",
+        "sip", "siap", "mantap", "bye", "assalamualaikum", "p",
+    }
+
+    _RECOMMENDATION_WORDS = {
+        "rekomendasi", "rekomendasikan", "rekom", "saran", "sarankan",
+        "cari", "carikan", "daftar", "list", "pilihan", "koleksi", "katalog",
+        "beli", "order", "pesan", "jual", "murah", "termurah", "terbaik",
+        "bagus", "populer", "favorit", "terlaris", "premium", "budget",
+        "dibawah", "max", "maksimal", "recommend", "popular", "suggest",
+        "buy", "catalog", "available",
+    }
+    _RECOMMENDATION_PHRASES = (
+        "di bawah", "kurang dari", "apa saja", "apa aja",
+        "ada batik apa", "ada produk apa", "punya batik apa",
+        "jual batik apa", "mau lihat", "lihat produk", "lihat koleksi",
+        "batik populer", "batik bagus", "batik murah", "batik premium",
+        "show me", "looking for", "under ",
+    )
+
+    _PRODUCT_SPEC_WORDS = {
+        "harga", "harganya", "brp", "berapa", "meter", "cm", "ukuran",
+        "ukurannya", "panjang", "panjangnya", "lebar", "lebarnya",
+        "perlembar", "lembar", "berat", "beratnya", "gram", "stok",
+        "ready", "tersedia", "spek", "spesifikasi", "bahan", "bahannya",
+        "teknik", "tekniknya", "bentuk", "bentuknya", "pewarna",
+        "toko", "tokonya", "sanggar", "umkm", "wa", "whatsapp",
+        "kontak", "alamat", "link", "shopee", "tokopedia", "price", "size",
+    }
+
+    _KNOWLEDGE_SIGNALS = (
+        "filosofi", "sejarah", "makna", "asal usul", "asal-usul",
+        "cara merawat", "cara mencuci", "perawatan", "proses pembuatan",
+        "perbedaan", "bedanya", "pengertian", "definisi", "apa itu",
+        "ceritakan", "cerita", "arti ", "artinya", "canting", "malam", "sogan",
+        "philosophy", "history", "meaning", "how to care", "how to wash",
+    )
+
+    _BACK_REF_PHRASES = (
+        "yang pertama", "yang kedua", "yang ketiga", "yang tadi",
+        "produk pertama", "produk kedua", "produk ketiga",
+        "batik pertama", "batik kedua", "batik ketiga",
+        "batik ini", "batik itu", "kain ini", "kain itu",
+        "produk ini", "produk itu", "barang ini", "barang itu",
+    )
+    _BACK_REF_WORDS = {
+        "ini", "itu", "tersebut", "tadi", "produknya", "batiknya",
+        "kainnya", "tokonya", "harganya", "ukurannya", "bahannya",
+        "filosofinya", "maknanya", "deskripsinya", "beratnya",
+    }
+
+    _EN_MARKERS = {
+        "what", "which", "where", "how", "why", "can", "could", "would",
+        "please", "recommend", "popular", "price", "size", "about",
+        "tell", "show", "looking", "want", "buy", "fabric", "shirt",
+        "the", "is", "are", "for", "under", "with",
+    }
+    _ID_MARKERS = {
+        "apa", "apakah", "ada", "aja", "saja", "yang", "ini", "itu",
+        "berapa", "bagaimana", "gimana", "dimana", "dong", "kak", "ya",
+        "bisa", "mau", "cari", "beli", "pesan", "harga", "ukuran",
+        "bahan", "filosofi", "sejarah", "makna", "rekomendasi", "murah",
+        "bagus", "populer", "dibawah", "bawah", "toko", "sanggar",
+        "perlembar", "lembar", "meter", "untuk", "buat", "dari", "dan",
+    }
+
+    _STOPWORDS = {
+        "apa", "apakah", "ada", "aja", "alamat", "alamatnya", "atau",
+        "bagaimana", "bagus", "bahan", "bahannya", "barang", "bawah", "beli",
+        "benar", "bener", "bentuk", "bentuknya", "berarti", "berapa", "berat",
+        "beratnya", "betul", "bisa", "brp", "budget", "buat", "bukan",
+        "cari", "carikan", "cerita", "ceritakan", "ceritanya", "cm", "coba",
+        "daftar", "dan", "dari", "dengan", "deskripsi", "deskripsinya",
+        "detail", "di", "dibawah", "dimana", "dong", "favorit", "filosofi",
+        "filosofinya", "gak", "gimana", "gram", "harga", "harganya", "idr",
+        "info", "informasi", "ini", "itu", "iya", "jadi", "jelaskan", "jenis",
+        "jual", "juta", "jt", "k", "kah", "kak", "kalau", "kalo", "kan",
+        "kasih", "katalog", "ke", "kedua", "ketiga", "kisaran", "kok",
+        "koleksi", "kontak", "kurang", "lebar", "lebarnya", "lembar", "lihat",
+        "link", "list", "makna", "maknanya", "mana", "maksimal", "mau", "max",
+        "mengenai", "meter", "min", "minta", "motif", "motifnya", "murah",
+        "nggak", "nih", "nya", "nomor", "order", "pakai", "panjang",
+        "panjangnya", "penjelasan", "penjual", "per", "perlembar", "pertama",
+        "pesan", "pewarna", "pilihan", "populer", "premium", "produk",
+        "produknya", "punya", "rb", "ready", "rekom", "rekomendasi",
+        "rekomendasikan", "ribu", "rp", "saja", "sama", "sanggar", "saran",
+        "sarankan", "satuan", "saya", "sejarah", "sejarahnya", "semua",
+        "seputar", "shopee", "sih", "spek", "spesifikasi", "stok", "tadi",
+        "tanya", "teknik", "tekniknya", "tentang", "terbaik", "terlaris",
+        "tersedia", "tersebut", "tidak", "toko", "tokonya", "tokopedia",
+        "tolong", "trenggalek", "tuh", "ukuran", "ukurannya", "umkm", "untuk",
+        "wa", "whatsapp", "ya", "yah", "yang",
+        # English filler words
+        "a", "an", "and", "are", "buy", "can", "do", "for", "give", "have",
+        "how", "i", "in", "is", "it", "looking", "me", "of", "on", "please",
+        "popular", "price", "recommend", "show", "some", "tell", "the",
+        "this", "that", "to", "under", "want", "what", "which", "with", "you",
+    }
+
+    @classmethod
+    def _detect_language(cls, tokens: set) -> str:
+        en_hits = len(tokens & cls._EN_MARKERS)
+        id_hits = len(tokens & cls._ID_MARKERS)
+        if en_hits >= 2 and en_hits > id_hits:
+            return "en"
+        return "id"
+
+    @classmethod
+    def _normalize_text(cls, text: str) -> str:
+        s = (text or "").lower().strip()
+        s = re.sub(r"[^\w\s.,/-]", " ", s)
+        s = re.sub(r"\s+", " ", s)
+        return s
+    
+    @staticmethod
+    def _clean_llm_output(text: str) -> str:
+        """Bersihkan artefak sitasi seperti 【DB-1】, [DB-1], [KB-2] jika masih lolos."""
+        if not text:
+            return text
+        cleaned = re.sub(r"\s*(?:【[^】]*?(?:DB|KB|\d+)[^】]*?】|\[(?:DB|KB)-\d+\])", "", text)
+        cleaned = re.sub(r"[ \t]+([.,!?])", r"\1", cleaned)
+        return cleaned.strip()
+
+    @classmethod
+    def _extract_max_harga(cls, normalized: str) -> Optional[int]:
+        m = re.search(
+            r"(?:dibawah|di bawah|max|maksimal|kurang dari|under|<)\s*(?:rp\.?\s*)?(\d+)\s*(rb|ribu|k)?",
+            normalized,
+        )
+        if not m:
+            return None
+        angka = int(m.group(1))
+        satuan = m.group(2)
+        if satuan in ("rb", "ribu", "k"):
+            angka *= 1000
+        elif satuan is None and angka < 1000:
+            angka *= 1000
+        return angka
+
+    @classmethod
+    def _extract_ordinal(cls, normalized: str) -> Optional[int]:
+        if any(p in normalized for p in ("yang pertama", "produk pertama", "batik pertama", "nomor 1", "no 1")):
+            return 0
+        if any(p in normalized for p in ("yang kedua", "produk kedua", "batik kedua", "nomor 2", "no 2")):
+            return 1
+        if any(p in normalized for p in ("yang ketiga", "produk ketiga", "batik ketiga", "nomor 3", "no 3")):
+            return 2
+        return None
+
+    @classmethod
+    def _analyze_query(cls, query: str) -> QueryAnalysis:
+        normalized = cls._normalize_text(query)
+        tokens = re.findall(r"[a-z0-9]+", normalized)
+        token_set = set(tokens)
+        language = cls._detect_language(token_set)
+
+        max_harga = cls._extract_max_harga(normalized)
+        ordinal_index = cls._extract_ordinal(normalized)
+
+        wants_recommendation = (
+            bool(token_set & cls._RECOMMENDATION_WORDS)
+            or any(p in normalized for p in cls._RECOMMENDATION_PHRASES)
+            or max_harga is not None
+        )
+        is_product_spec = bool(token_set & cls._PRODUCT_SPEC_WORDS)
+        is_knowledge_ask = any(sig in normalized for sig in cls._KNOWLEDGE_SIGNALS)
+        has_back_reference = (
+            ordinal_index is not None
+            or any(p in normalized for p in cls._BACK_REF_PHRASES)
+            or bool(token_set & cls._BACK_REF_WORDS)
+        )
+
+        # Social murni: sapaan/ucapan terima kasih tanpa pertanyaan batik/produk
+        has_domain_signal = (
+            wants_recommendation
+            or is_product_spec
+            or is_knowledge_ask
+            or "?" in query
+            or bool(token_set & {"batik", "kain", "motif", "produk", "toko", "sanggar"})
+        )
+        is_social = (
+            not has_domain_signal
+            and (
+                any(p in normalized for p in cls._SOCIAL_PHRASES)
+                or bool(token_set & cls._SOCIAL_WORDS)
+            )
+        )
+
+        # Ekstrak kandidat keyword nama barang/toko/motif setelah bersihkan harga & ukuran
+        cleaned = re.sub(
+            r"(?:dibawah|di bawah|max|maksimal|kurang dari|under|<)\s*(?:rp\.?\s*)?\d+\s*(?:rb|ribu|k)?",
+            " ",
+            normalized,
+        )
+        cleaned = re.sub(r"\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta)\b", " ", cleaned)
+        cleaned = re.sub(r"\b(?:rp\.?\s*)?\d{4,}\b", " ", cleaned)
+        cleaned = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:cm|mm|m|meter|gr|gram|kg)\b", " ", cleaned)
+
+        clean_tokens = [t for t in re.findall(r"[a-z0-9]+", cleaned) if t not in cls._STOPWORDS]
+        specific_tokens = [t for t in clean_tokens if t not in {"batik", "kain", "produk"}]
+        keyword_candidate = " ".join(clean_tokens[:4]) if specific_tokens else ""
+
+        return QueryAnalysis(
+            raw=query,
+            normalized=normalized,
+            tokens=tokens,
+            token_set=token_set,
+            language=language,
+            is_social=is_social,
+            wants_recommendation=wants_recommendation,
+            is_product_spec=is_product_spec,
+            is_knowledge_ask=is_knowledge_ask,
+            has_back_reference=has_back_reference,
+            ordinal_index=ordinal_index,
+            max_harga=max_harga,
+            keyword_candidate=keyword_candidate,
+        )
+
+    # =====================================================================
+    # STEP 2: CEK & COCOKKAN BARANG DI DB (+ KONTEKS SEBELUMNYA)
+    # =====================================================================
+
+    def _fetch_products_from_backend(
+        self,
+        keyword: Optional[str] = None,
+        motif: Optional[str] = None,
+        max_harga: Optional[int] = None,
+        limit: int = BACKEND_MAX_LIMIT,
+    ) -> List[Dict]:
+        url = build_backend_url(BACKEND_PRODUCT_PATH)
+        params: Dict = {"limit": min(max(1, limit), BACKEND_MAX_LIMIT)}
+        if keyword:
+            params["keyword"] = keyword
+        if motif:
+            params["motif"] = motif
+        if max_harga is not None:
+            params["max_harga"] = max_harga
+
+        try:
+            r = requests.get(
+                url,
+                params=params,
+                headers=get_backend_headers(),
+                timeout=BACKEND_TIMEOUT,
+            )
+            r.raise_for_status()
+            data = r.json()
+            if isinstance(data, dict):
+                data = data.get("data") or data.get("items") or []
+            return data if isinstance(data, list) else []
+        except requests.exceptions.Timeout:
+            logger.warning("[DB] Backend timeout (%ds) → %s", BACKEND_TIMEOUT, url)
+            return []
+        except requests.exceptions.RequestException as e:
+            logger.warning("[DB] Backend request gagal: %s", e)
+            return []
+        except Exception:
+            logger.exception("[DB] Error tak terduga saat memanggil backend")
+            return []
 
     @staticmethod
-    def _retrieve_rules(
-        col,
-        query_emb: List[float],
-        k: int,
-        fallback: str,
+    def _has_phrase(haystack: str, needle: str) -> bool:
+        if not haystack or not needle:
+            return False
+        pattern = rf"(^|[^a-z0-9]){re.escape(needle)}([^a-z0-9]|$)"
+        return re.search(pattern, haystack) is not None
+
+    @classmethod
+    def _match_products_in_catalog(
+        cls,
+        analysis: QueryAnalysis,
+        catalog: List[Dict],
+    ) -> List[Tuple[int, Dict]]:
+        """
+        Cocokkan query terhadap nama barang, motif, dan toko asli di DB.
+        Mengembalikan list (score, product) yang benar-benar cocok.
+        """
+        q_norm = analysis.normalized
+        kw_tokens = [
+            t for t in re.findall(r"[a-z0-9]+", analysis.keyword_candidate.lower())
+            if t not in {"batik", "kain", "produk"}
+        ]
+
+        scored: List[Tuple[int, Dict]] = []
+        for p in catalog:
+            attrs = p.get("additional_attribute") or {}
+            raw_name = cls._normalize_text(str(p.get("name") or ""))
+            raw_motif = cls._normalize_text(str(p.get("motif") or attrs.get("motif") or ""))
+            raw_shop = cls._normalize_text(str(p.get("nama_umkm") or ""))
+            raw_desc = cls._normalize_text(str(p.get("description") or ""))
+            raw_attrs = cls._normalize_text(
+                " ".join(str(v) for v in attrs.values() if v is not None)
+            )
+
+            score = 0
+
+            # 1. Exact phrase match nama produk / motif / toko dari DB di dalam query user
+            if len(raw_name) >= 3 and cls._has_phrase(q_norm, raw_name):
+                score += 25
+            if len(raw_motif) >= 3 and cls._has_phrase(q_norm, raw_motif):
+                score += 15
+            if len(raw_shop) >= 4 and cls._has_phrase(q_norm, raw_shop):
+                score += 12
+
+            # 2. Token match spesifik (mendukung nama parsial seperti "tes 2" untuk "Batik Tes 2")
+            name_words = set(re.findall(r"[a-z0-9]+", f"{raw_name} {raw_motif}"))
+            shop_words = set(re.findall(r"[a-z0-9]+", raw_shop))
+            desc_words = set(re.findall(r"[a-z0-9]+", f"{raw_attrs} {raw_desc}"))
+
+            matched_name_tokens = 0
+            for tok in kw_tokens:
+                if tok in name_words:
+                    score += 6
+                    matched_name_tokens += 1
+                elif len(tok) >= 4 and tok in f"{raw_name} {raw_motif}":
+                    score += 3
+                    matched_name_tokens += 1
+                elif tok in shop_words:
+                    score += 4
+                elif len(tok) >= 4 and tok in desc_words:
+                    score += 1
+
+            # Bonus jika semua token spesifik query ditemukan di nama produk/motif
+            if kw_tokens and matched_name_tokens == len(kw_tokens):
+                score += 6
+
+            if score >= 6:
+                scored.append((score, p))
+
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return scored
+
+    def _resolve_db_products(
+        self,
+        analysis: QueryAnalysis,
+        session_id: str,
+    ) -> Tuple[List[Dict], str]:
+        """
+        Cek apakah barang yang ditanyakan ada di DB (atau konteks sebelumnya).
+        Return: (products, match_mode)
+            match_mode: "db_entity" | "session_context" | "db_catalog" | "none"
+        """
+        # Ambil snapshot katalog aktif dari DB (selalu fresh, <= 20 item)
+        catalog = self._fetch_products_from_backend(
+            max_harga=analysis.max_harga,
+            limit=BACKEND_MAX_LIMIT,
+        )
+
+        # Jika ada keyword spesifik, coba juga direct search DB bila jumlah produk > 20
+        if analysis.keyword_candidate:
+            direct_hits = self._fetch_products_from_backend(
+                keyword=analysis.keyword_candidate,
+                max_harga=analysis.max_harga,
+                limit=PRODUCT_K,
+            )
+            if direct_hits:
+                seen_ids = {str(p.get("id")) for p in catalog}
+                for item in direct_hits:
+                    if str(item.get("id")) not in seen_ids:
+                        catalog.append(item)
+
+        if not catalog:
+            return [], "none"
+
+        # 1. Cek kecocokan langsung nama barang / motif / toko di DB
+        matched = self._match_products_in_catalog(analysis, catalog)
+        if matched:
+            top_score = matched[0][0]
+            # Jika ada exact match (score >= 25), jangan ikutkan produk lain yang cuma mirip tipis
+            if top_score >= 25 and not analysis.wants_recommendation:
+                selected = [p for s, p in matched if s >= top_score - 5]
+            else:
+                selected = [p for _, p in matched]
+            return selected[: max(PRODUCT_K, 5)], "db_entity"
+
+        # 2. Jika tidak menyebut nama baru tapi merujuk konteks percakapan sebelumnya
+        last_products = self._session_last_products.get(session_id) or []
+        if analysis.has_back_reference and last_products and not analysis.wants_recommendation:
+            catalog_by_id = {str(p.get("id")): p for p in catalog if p.get("id")}
+            if analysis.ordinal_index is not None and analysis.ordinal_index < len(last_products):
+                ref_list = [last_products[analysis.ordinal_index]]
+            else:
+                ref_list = last_products[:2]
+
+            # Segarkan dari data DB terbaru berdasarkan ID
+            refreshed = [
+                catalog_by_id.get(str(p.get("id")), p)
+                for p in ref_list
+            ]
+            return refreshed, "session_context"
+
+        # 3. Jika permintaan rekomendasi / daftar katalog / filter harga -> ambil dari DB
+        if analysis.wants_recommendation:
+            return catalog[: max(PRODUCT_K * 2, 6)], "db_catalog"
+
+        # 4. Jika menanyakan spesifikasi umum dengan konteks batik/toko (misal "ukuran batik disini berapa?")
+        if analysis.is_product_spec and (
+            bool(analysis.token_set & {"batik", "kain", "produk", "toko", "sanggar"})
+            or analysis.has_back_reference
+        ):
+            return catalog[:PRODUCT_K], "db_catalog"
+
+        return [], "none"
+
+    # =====================================================================
+    # FORMATTER PRODUK DB -> CHUNK TEKS UNTUK RERANK & LLM
+    # =====================================================================
+
+    @staticmethod
+    def _fmt_meter(cm_val) -> str:
+        try:
+            m = float(cm_val) / 100.0
+            return f"{m:g}".replace(".", ",")
+        except (TypeError, ValueError):
+            return ""
+
+    @classmethod
+    def _format_product_chunk(
+        cls,
+        p: Dict,
+        desc_max_chars: int = 600,
+        include_shop_desc: bool = True,
     ) -> str:
-        """Ambil top-k chunk aturan paling relevan; fallback jika kosong/gagal."""
+        harga_num = p.get("harga") or p.get("harga_per_meter")
+        harga = (
+            f"Rp{int(harga_num):,}".replace(",", ".")
+            if harga_num is not None and harga_num != "" else "-"
+        )
+        attrs = p.get("additional_attribute")
+        if not isinstance(attrs, dict):
+            attrs = {}
+
+        parts = [
+            f"Produk: {p.get('nama_motif', p.get('name', '-'))}",
+            f"Toko: {p.get('nama_umkm', '-')}",
+            f"Harga: {harga}",
+        ]
+
+        panjang = p.get("panjang_cm") if p.get("panjang_cm") is not None else attrs.get("panjang_cm")
+        lebar = p.get("lebar_cm") if p.get("lebar_cm") is not None else attrs.get("lebar_cm")
+        if panjang is not None and lebar is not None:
+            parts.append(
+                f"Ukuran: {panjang}x{lebar} cm ({cls._fmt_meter(panjang)}x{cls._fmt_meter(lebar)} m per lembar)"
+            )
+        elif panjang is not None:
+            parts.append(f"Panjang: {panjang} cm ({cls._fmt_meter(panjang)} m)")
+        elif lebar is not None:
+            parts.append(f"Lebar: {lebar} cm ({cls._fmt_meter(lebar)} m)")
+
+        for label, key in (
+            ("Motif", "motif"),
+            ("Teknik", "teknik"),
+            ("Bahan", "bahan"),
+            ("Bentuk", "bentuk"),
+        ):
+            val = p.get(key) or attrs.get(key)
+            if val:
+                parts.append(f"{label}: {val}")
+
+        berat = p.get("berat_gram") if p.get("berat_gram") is not None else attrs.get("berat_gram")
+        if berat is not None and berat != "":
+            parts.append(f"Berat: {berat} gram")
+
+        pewarna = (
+            p.get("pewarna_alami")
+            if p.get("pewarna_alami") is not None
+            else attrs.get("pewarna_alami")
+        )
+        if isinstance(pewarna, bool):
+            parts.append(f"Pewarna alami: {'Ya' if pewarna else 'Tidak'}")
+
+        handled = {
+            "motif", "teknik", "bahan", "bentuk",
+            "panjang_cm", "lebar_cm", "berat_gram", "pewarna_alami",
+        }
+        for k, v in attrs.items():
+            if k in handled or v is None or str(v).strip() == "":
+                continue
+            val_str = "Ya" if v is True else ("Tidak" if v is False else str(v))
+            parts.append(f"{k.replace('_', ' ').title()}: {val_str}")
+
+        desc = str(p.get("description") or "").strip()
+        if desc:
+            short_desc = desc[:desc_max_chars] + ("…" if len(desc) > desc_max_chars else "")
+            parts.append(f"Deskripsi & Filosofi: {short_desc}")
+
+        if include_shop_desc:
+            shop_desc = str(p.get("shop_description") or "").strip()
+            if shop_desc:
+                short_sdesc = shop_desc[:250] + ("…" if len(shop_desc) > 250 else "")
+                parts.append(f"Profil Toko: {short_sdesc}")
+
+        parts.append(f"WA: {p.get('kontak_wa', '-')}")
+        parts.append(f"Alamat: {p.get('alamat', '-')}")
+        return " | ".join(parts)
+
+    # =====================================================================
+    # RULE RETRIEVAL & PROMPT BUILDERS (DENGAN KUNCI BAHASA PERMANEN)
+    # =====================================================================
+
+    @staticmethod
+    def _retrieve_rules(col, query_emb: List[float], k: int, fallback: str) -> str:
         if col is None or k <= 0:
             return fallback
-
         try:
             total = col.count()
             if total == 0:
                 return fallback
-
             res = col.query(
                 query_embeddings=[query_emb],
                 n_results=min(k, total),
@@ -276,92 +839,111 @@ class HarnessPipeline:
             logger.exception("[Rules] Gagal query koleksi aturan")
             return fallback
 
-    # ── Prompt builders ────────────────────────────────────────────────
-
     def _base_system_prompt(
         self,
         instructions_text: str,
         guard_rails_text: str,
+        language: str,
     ) -> str:
-        """Bagian system prompt yang selalu ada di semua intent."""
+        if language == "en":
+            lang_rule = (
+                "- MANDATORY LANGUAGE: The user asked in English. "
+                "Respond entirely in natural, friendly English."
+            )
+        else:
+            lang_rule = (
+                "- BAHASA WAJIB: Pengguna bertanya dalam Bahasa Indonesia. "
+                "WAJIB jawab sepenuhnya dalam Bahasa Indonesia yang santai, sopan, dan bersahabat. "
+                "DILARANG menjawab dalam Bahasa Inggris."
+            )
+
         return (
             "=== INSTRUKSI ===\n"
             f"{instructions_text}\n\n"
             "=== GUARD RAILS ===\n"
             f"{guard_rails_text}\n\n"
-            "=== GAYA BAHASA ===\n"
-            "- Jawab secara natural, sopan, dan mengalir seperti percakapan CS manusia.\n"
-            "- Penjelasan boleh cukup lengkap jika memang membantu memperjelas jawaban.\n"
-            "- DILARANG menutup jawaban dengan kalimat template/klise seperti "
-            "'Ada yang bisa saya bantu lagi?', 'Ada yang ingin saya bantu lagi?', "
-            "atau 'Apakah ada pertanyaan lain?'. Akhiri jawaban secara natural begitu informasi selesai."
+            "=== ATURAN WAJIB GAYA & AKURASI ===\n"
+            f"{lang_rule}\n"
+            "- Sampaikan ulang informasi dengan bahasamu sendiri yang hangat, ringan, dan natural "
+            "seperti CS manusia—JANGAN menyalin mentah susunan kalimat dari data.\n"
+            "- KETAT PADA FAKTA: Parafrase hanya boleh mengubah gaya bahasa, DILARANG keras menambah "
+            "fakta, makna simbolis, filosofi tambahan, atau klaim asal daerah yang tidak tertulis "
+            "eksplisit di data (misalnya jangan menyebut motif sebagai 'warisan batik Trenggalek' "
+            "jika data menyebut asal daerah lain atau tidak menyebutkannya).\n"
+            "- Jika pengguna menanyakan filosofi/makna namun data hanya menjelaskan bentuk atau ciri "
+            "motifnya, jelaskan sebatas informasi yang tertulis tanpa mengarang makna tambahan.\n"
+            "- Langsung masuk ke inti jawaban tanpa kata pembuka kaku ('Singkatnya,', 'Intinya,', dll.) "
+            "dan tanpa kalimat penutup klise ('Ada yang bisa saya bantu lagi?').\n"
+            "- DILARANG menampilkan kode sitasi seperti [DB-1], 【DB-1】, [KB-1], atau [1]."
         )
 
-    def _knowledge_system_prompt(
+    def _build_unified_system_prompt(
         self,
-        context_str: str,
+        db_chunks: List[RerankedChunk],
+        kb_chunks: List[RerankedChunk],
         instructions_text: str,
         guard_rails_text: str,
+        analysis: QueryAnalysis,
+        show_cards: bool,
     ) -> str:
-        base = self._base_system_prompt(instructions_text, guard_rails_text)
-        return (
-            f"{base}\n\n"
-            "=== KONTEKS DARI KNOWLEDGE BASE ===\n"
-            f"{context_str}\n\n"
-            "Jawab pertanyaan HANYA berdasarkan konteks di atas secara natural. "
-            "Jika konteks tidak cukup, katakan dengan jujur bahwa informasinya belum tersedia. "
-            "Jangan mengarang fakta di luar konteks."
+        base = self._base_system_prompt(
+            instructions_text, guard_rails_text, analysis.language
         )
+        parts = [base]
 
-    def _product_system_prompt(
-        self,
-        product_context: str,
-        instructions_text: str,
-        guard_rails_text: str,
-        is_recommendation: bool = True,
-    ) -> str:
-        base = self._base_system_prompt(instructions_text, guard_rails_text)
+        if db_chunks:
+            # Tanpa tag [DB-1] supaya model tidak ikut mencetak sitasi 【DB-1】
+            db_str = "\n---\n".join(c.konten_chunk for c in db_chunks)
+            parts.append(
+                "=== DATA RESMI DATABASE (SUMBER UTAMA) ===\n"
+                f"{db_str}"
+            )
 
-        if is_recommendation:
-            task_rule = (
-                "Berikan rekomendasi produk berdasarkan data di atas dengan gaya bahasa natural. "
-                "Jelaskan singkat keunggulan, harga, atau ciri khas tiap produk. "
-                "Karena kartu produk (dengan tombol Buku, 3D, dan WA) sudah otomatis tampil di bawah pesan, "
-                "tidak perlu memaksakan format daftar kaku atau mengulang nomor WA berulang-ulang. "
-                "Jangan mengarang data di luar daftar."
+        if kb_chunks:
+            kb_str = "\n---\n".join(c.konten_chunk for c in kb_chunks)
+            parts.append(
+                "=== PENGETAHUAN TAMBAHAN ===\n"
+                f"{kb_str}"
+            )
+
+        if show_cards and db_chunks:
+            task = (
+                "Rekomendasikan produk HANYA dari DATA RESMI DATABASE di atas secara singkat, "
+                "ramah, dan mengalir. Sebutkan intinya saja (nama, kisaran harga, dan daya tariknya) "
+                "karena kartu produk dengan tombol Buku, 3D, dan WA sudah otomatis tampil di bawah pesan. "
+                "Jangan ulang nomor WA berkali-kali dan jangan mengarang produk di luar data."
+            )
+        elif db_chunks and kb_chunks:
+            task = (
+                "Rangkum jawaban secara singkat, jelas, dan bersahabat dengan bahasamu sendiri. "
+                "Utamakan fakta dari DATA RESMI DATABASE (bila ada perbedaan, wajib ikuti Database) "
+                "dan gunakan PENGETAHUAN TAMBAHAN hanya untuk melengkapi konteks umum. "
+                "Jangan menyalin kalimat deskripsi mentah-mentah dan jangan memaksakan ajakan beli/WA."
+            )
+        elif db_chunks:
+            task = (
+                "Rangkum jawaban langsung ke inti pertanyaan menggunakan bahasamu sendiri yang "
+                "bersahabat dan mudah dipahami berdasarkan DATA RESMI DATABASE di atas. "
+                "Jangan copy-paste mentah teks deskripsi; sarikan poin utamanya saja. "
+                "Jangan memaksakan ajakan beli atau nomor WA kecuali pengguna memang memintanya."
             )
         else:
-            task_rule = (
-                "Pengguna sedang mengonfirmasi atau menanyakan detail spesifik produk. "
-                "Jawab langsung dan natural berdasarkan data produk di atas. "
-                "Boleh tambahkan penjelasan konteks yang relevan (misalnya bahan, ukuran, atau keterangan kain) "
-                "agar informatif, tetapi JANGAN memaksakan ajakan memesan atau menyertakan nomor WA "
-                "kecuali pengguna memang menanyakan kontak/cara pesan, atau jika informasi yang ditanyakan "
-                "belum dicantumkan penjual di data produk. Jangan mengarang data di luar daftar."
+            task = (
+                "Rangkum jawaban secara singkat, bersahabat, dan mudah dipahami HANYA berdasarkan "
+                "PENGETAHUAN TAMBAHAN di atas. Jika informasinya belum ada, katakan dengan jujur "
+                "tanpa mengarang fakta."
             )
 
-        return (
-            f"{base}\n\n"
-            "=== DATA PRODUK KATALOG ===\n"
-            f"{product_context}\n\n"
-            f"{task_rule}"
-        )
+        parts.append(f"=== TUGAS ===\n{task}")
+        return "\n\n".join(parts)
 
-    def _social_system_prompt(self) -> str:
-        # Sapaan cukup pakai fallback ringkas agar hemat token & latensi
-        base = self._base_system_prompt(
-            _FALLBACK_INSTRUCTIONS, _FALLBACK_GUARD_RAILS
-        )
-        return (
-            f"{base}\n\n"
-            "Jawab sapaan atau obrolan singkat dengan ramah, santai, dan tidak kaku."
-        )
+    # =====================================================================
+    # PUBLIC API (STEP 1 -> STEP 7)
+    # =====================================================================
 
-    # ── Public API ──────────────────────────────────────────────────────
-
-    def answer(self, query: str) -> RAGResponse:
+    def answer(self, query: str, session_id: str = "default") -> RAGResponse:
         t_start = time.perf_counter()
-        query   = (query or "").strip()
+        query = (query or "").strip()
         if not query:
             return RAGResponse(
                 answer="Maaf, pertanyaan kosong.",
@@ -369,450 +951,272 @@ class HarnessPipeline:
                 processing_time=time.perf_counter() - t_start,
             )
 
-        intent = self._detect_intent(query)
-        logger.info("Query intent=%s  query=%r", intent, query[:100])
+        # ── STEP 1: NLP Preprocessing & Analisis ────────────────────────
+        analysis = self._analyze_query(query)
+        logger.info(
+            "[NLP] lang=%s social=%s recom=%s spec=%s know=%s backref=%s kw=%r max_harga=%s",
+            analysis.language,
+            analysis.is_social,
+            analysis.wants_recommendation,
+            analysis.is_product_spec,
+            analysis.is_knowledge_ask,
+            analysis.has_back_reference,
+            analysis.keyword_candidate,
+            analysis.max_harga,
+        )
 
-        # ── Cache lookup (hanya knowledge & social) ────────────────────
-        cache_key = None
-        if intent in ("knowledge", "social"):
-            cache_key = hashlib.md5(f"{intent}:{query}".encode("utf-8")).hexdigest()
-            cached = self.cache.get(cache_key)
+        # Jalur cepat untuk sapaan/social
+        if analysis.is_social:
+            resp = self._answer_social(analysis, t_start)
+            self._maybe_cleanup_cache()
+            return resp
+
+        # ── STEP 2: Cek & Retrieve dari DB (+ konteks sebelumnya) ───────
+        t_ret = time.perf_counter()
+        db_products, match_mode = self._resolve_db_products(analysis, session_id)
+        logger.info(
+            "[DB] match_mode=%s count=%d",
+            match_mode, len(db_products),
+        )
+
+        # Cache lookup khusus pertanyaan pengetahuan murni tanpa hasil DB & tanpa back-ref
+        pure_kb_cache_key = None
+        if not db_products and not analysis.has_back_reference:
+            pure_kb_cache_key = hashlib.md5(
+                f"kb:{analysis.language}:{analysis.normalized}".encode("utf-8")
+            ).hexdigest()
+            cached = self.cache.get(pure_kb_cache_key)
             if cached is not None:
-                logger.info("[Cache] HIT — intent=%s query=%r", intent, query[:80])
+                logger.info("[Cache] HIT — pure knowledge query=%r", query[:80])
                 return RAGResponse(
                     answer=cached["answer"],
-                    intent=intent,
+                    intent=cached.get("intent", "knowledge"),
                     sources=cached.get("sources", []),
                     processing_time=time.perf_counter() - t_start,
                 )
 
-        # ── Proses normal ──────────────────────────────────────────────
-        if intent == "product":
-            resp = self._answer_product(query, t_start)
-        elif intent == "social":
-            resp = self._answer_social(query, t_start)
-        else:
-            resp = self._answer_knowledge(query, t_start)
+        # Embed query (untuk rules + ChromaDB pelengkap jika dibutuhkan)
+        query_emb = self.models.embed(query)
 
-        # ── Simpan ke cache ────────────────────────────────────────────
-        if cache_key and resp.answer and resp.answer != _LLM_ERROR_ANSWER:
-            self.cache.set(
-                key=cache_key,
-                intent=intent,
-                query=query,
-                answer=resp.answer,
-                sources=resp.sources,
-            )
-
-        # ── Cleanup periodik (khusus SQLite, Redis auto-expire) ────────
-        now = time.time()
-        if now - self._cache_last_cleanup > 600:
-            self._cache_last_cleanup = now
-            self.cache.cleanup()
-
-        return resp
-
-    # ── Product ─────────────────────────────────────────────────────────
-
-    _RECOMMENDATION_SIGNALS = {
-        "rekomendasi", "rekomendasikan", "rekom", "saran", "sarankan",
-        "cari", "carikan", "daftar", "list", "pilihan", "koleksi",
-        "beli", "order", "pesan", "murah", "termurah", "terbaik", "bagus",
-        "premium", "budget", "dibawah", "max", "maksimal",
-    }
-    _RECOMMENDATION_PHRASES = (
-        "di bawah", "kurang dari", "apa saja", "apa aja",
-        "ada batik apa", "ada produk apa", "punya batik apa",
-        "jual batik apa", "mau lihat", "lihat produk",
-    )
-
-    @classmethod
-    def _is_recommendation_query(cls, query: str) -> bool:
-        """True jika user minta rekomendasi/cari/pesan (tampilkan kartu), False jika konfirmasi/detail."""
-        q_lower = query.lower().strip()
-        tokens = set(re.findall(r"[a-z0-9]+", q_lower))
-        if tokens & cls._RECOMMENDATION_SIGNALS:
-            return True
-        if any(phrase in q_lower for phrase in cls._RECOMMENDATION_PHRASES):
-            return True
-        return False
-
-    def _answer_product(self, query: str, t_start: float) -> RAGResponse:
-        is_recommendation = self._is_recommendation_query(query)
-        response_intent = "product" if is_recommendation else "product_detail"
-
-        filters = self._extract_product_filters(query)
-        logger.info("[Product] mode=%s filter=%s", response_intent, filters)
-
-        t_http = time.perf_counter()
-        products = self._fetch_products_from_backend(filters, limit=PRODUCT_K)
-
-        # Fallback: jika keyword spesifik tidak ketemu di SQL ILIKE,
-        # ambil daftar produk lebih luas lalu cocokkan token secara lokal
-        if not products and (filters.get("keyword") or filters.get("motif")):
-            broad_filters = {}
-            if filters.get("max_harga"):
-                broad_filters["max_harga"] = filters["max_harga"]
-
-            candidates = self._fetch_products_from_backend(broad_filters, limit=20)
-            if candidates:
-                matched = self._rank_products_by_query(
-                    query=query,
-                    keyword=filters.get("keyword") or "",
-                    products=candidates,
-                    limit=PRODUCT_K,
-                )
-                products = matched if matched else candidates[:PRODUCT_K]
-                logger.info(
-                    "[Product] fallback lokal -> %d dari %d kandidat",
-                    len(products),
-                    len(candidates),
-                )
-
-        http_elapsed = time.perf_counter() - t_http
-        logger.info(
-            "[Product] %d produk dari backend (%.3fs)",
-            len(products), http_elapsed,
-        )
-
-        if not products:
-            return RAGResponse(
-                answer=(
-                    "Maaf, belum ada produk yang cocok dengan permintaan Anda. "
-                    "Coba sebutkan nama produk, motif, atau kisaran harga lain."
+        # Ubah produk DB menjadi kandidat chunk
+        show_cards = bool(db_products) and analysis.wants_recommendation
+        desc_limit = 220 if show_cards else 850
+        db_candidates: List[CandidateChunk] = [
+            CandidateChunk(
+                isi_id=str(p.get("id") or p.get("name") or f"db_{idx}"),
+                konten_chunk=self._format_product_chunk(
+                    p,
+                    desc_max_chars=desc_limit,
+                    include_shop_desc=not show_cards,
                 ),
-                intent=response_intent,
+                vector_score=0.0,
+                source_type="db",
+                product_data=p,
+            )
+            for idx, p in enumerate(db_products, 1)
+        ]
+
+        # Ambil ChromaDB HANYA bila:
+        #   (a) DB tidak menemukan barang yang cocok, ATAU
+        #   (b) pengguna memang bertanya pengetahuan/filosofi/sejarah
+        # (JANGAN campur ChromaDB ke rekomendasi/spesifikasi katalog agar data lama tidak bocor)
+        kb_candidates: List[CandidateChunk] = []
+        should_use_chroma = (not db_candidates) or (
+            analysis.is_knowledge_ask and not show_cards
+        )
+        if should_use_chroma:
+            kb_candidates = self.chroma.retrieve(query_emb, k=MAX_CHROMA_K)
+
+        retrieval_elapsed = time.perf_counter() - t_ret
+
+        if not db_candidates and not kb_candidates:
+            empty_msg = (
+                "Sorry, I couldn't find matching products or information for your request."
+                if analysis.language == "en"
+                else "Maaf, belum ada produk atau informasi yang cocok dengan permintaan Anda."
+            )
+            return RAGResponse(
+                answer=empty_msg,
+                intent="product" if analysis.wants_recommendation else "knowledge",
                 sources=[],
                 processing_time=time.perf_counter() - t_start,
-                retrieval_time=http_elapsed,
+                retrieval_time=retrieval_elapsed,
             )
 
-        query_emb = self.models.embed(query)
-        instructions_text = self._retrieve_rules(
-            self.instruction_col, query_emb, min(1, INSTRUCTION_K), _FALLBACK_INSTRUCTIONS
-        )
-        guard_rails_text = self._retrieve_rules(
-            self.guard_rails_col, query_emb, min(1, GUARDRAILS_K), _FALLBACK_GUARD_RAILS
+        # ── STEP 3: Rerank Terpadu (CrossEncoder) ───────────────────────
+        t_rr = time.perf_counter()
+        all_candidates = db_candidates + kb_candidates
+        scores = self.models.rerank(
+            query, [c.konten_chunk for c in all_candidates]
         )
 
-        product_context = self._format_products_for_llm(products)
-        system_prompt = self._product_system_prompt(
-            product_context,
-            instructions_text,
-            guard_rails_text,
-            is_recommendation=is_recommendation,
+        reranked_db: List[RerankedChunk] = []
+        reranked_kb: List[RerankedChunk] = []
+        for c, s in zip(all_candidates, scores):
+            rc = RerankedChunk(
+                isi_id=c.isi_id,
+                konten_chunk=c.konten_chunk,
+                vector_score=c.vector_score,
+                rerank_score=float(s),
+                source_type=c.source_type,
+                product_data=c.product_data,
+            )
+            if c.source_type == "db":
+                reranked_db.append(rc)
+            else:
+                reranked_kb.append(rc)
+
+        reranked_db.sort(key=lambda x: x.rerank_score, reverse=True)
+        reranked_kb.sort(key=lambda x: x.rerank_score, reverse=True)
+
+        # Potong top-K sesuai mode
+        if show_cards:
+            selected_db = reranked_db[:PRODUCT_K]
+            selected_kb = []
+        elif reranked_db:
+            # Untuk pertanyaan spesifik/filosofi produk: ambil 1-2 produk DB teratas
+            # + maksimal 1 chunk ChromaDB pelengkap jika memang relevan
+            db_keep = 1 if match_mode == "session_context" else min(2, len(reranked_db))
+            selected_db = reranked_db[:db_keep]
+            selected_kb = (
+                [c for c in reranked_kb[:1] if c.rerank_score >= -1.0]
+                if analysis.is_knowledge_ask
+                else []
+            )
+        else:
+            selected_db = []
+            selected_kb = reranked_kb[:RERANKED_K]
+
+        rerank_elapsed = time.perf_counter() - t_rr
+        logger.info(
+            "[Rerank] db=%d (best=%.3f) | kb=%d (best=%.3f) | time=%.3fs",
+            len(selected_db),
+            selected_db[0].rerank_score if selected_db else 0.0,
+            len(selected_kb),
+            selected_kb[0].rerank_score if selected_kb else 0.0,
+            rerank_elapsed,
+        )
+
+        # Simpan produk terpilih ke memori sesi untuk pertanyaan lanjutan
+        selected_products = [c.product_data for c in selected_db if c.product_data]
+        if selected_products:
+            self._remember_products(session_id, selected_products)
+
+        # ── STEP 4: Retrieve Rules (instruction & guard_rails) ──────────
+        rule_k_inst = min(1, INSTRUCTION_K) if selected_db else INSTRUCTION_K
+        rule_k_guard = min(1, GUARDRAILS_K) if selected_db else GUARDRAILS_K
+
+        instructions_text = self._retrieve_rules(
+            self.instruction_col, query_emb, rule_k_inst, _FALLBACK_INSTRUCTIONS
+        )
+        guard_rails_text = self._retrieve_rules(
+            self.guard_rails_col, query_emb, rule_k_guard, _FALLBACK_GUARD_RAILS
+        )
+
+        system_prompt = self._build_unified_system_prompt(
+            db_chunks=selected_db,
+            kb_chunks=selected_kb,
+            instructions_text=instructions_text,
+            guard_rails_text=guard_rails_text,
+            analysis=analysis,
+            show_cards=show_cards,
         )
 
         logger.info(
-            "[Product] breakdown chars | mode=%s | instructions=%d | guard_rails=%d | products=%d | query=%d | TOTAL=%d (~%d est. tokens)",
-            response_intent,
-            len(instructions_text),
-            len(guard_rails_text),
-            len(product_context),
-            len(query),
+            "[LLM] mode=%s show_cards=%s lang=%s | TOTAL=%d chars (~%d est. tokens)",
+            match_mode,
+            show_cards,
+            analysis.language,
             len(system_prompt) + len(query),
             (len(system_prompt) + len(query)) // 3,
         )
 
+        # ── STEP 5: Rangkum dengan LLM ──────────────────────────────────
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": query},
         ]
 
-        t_gen = time.perf_counter()
-        answer = self.models.llm.generate(
-            messages,
-            temperature=0.4,
-            top_p=0.9,
-            max_tokens=PRODUCT_MAX_TOKENS,
-        )
-        gen_elapsed = time.perf_counter() - t_gen
+        max_tokens = PRODUCT_MAX_TOKENS if selected_db else KNOWLEDGE_MAX_TOKENS
+        temp = 0.35 if show_cards else 0.3
 
-        return RAGResponse(
+        t_gen = time.perf_counter()
+        raw_answer = self.models.llm.generate(
+            messages,
+            temperature=temp,
+            top_p=0.9,
+            max_tokens=max_tokens,
+        )
+        answer = self._clean_llm_output(raw_answer)
+        gen_elapsed = time.perf_counter() - t_gen
+        
+        # ── STEP 6: Output + Intent & Sources untuk Frontend ────────────
+        if show_cards:
+            response_intent = "product"
+            sources = [{"tipe": "produk", **p} for p in selected_products]
+        elif selected_db:
+            response_intent = "product_detail"
+            sources = []
+        else:
+            response_intent = "knowledge"
+            sources = [
+                {
+                    "tipe": "knowledge_base",
+                    "isi_id": c.isi_id,
+                    "vector_score": f"{c.vector_score:.4f}",
+                    "rerank_score": f"{c.rerank_score:.4f}",
+                    "preview": c.konten_chunk[:200] + ("…" if len(c.konten_chunk) > 200 else ""),
+                }
+                for c in selected_kb
+            ]
+
+        resp = RAGResponse(
             answer=answer,
             intent=response_intent,
-            sources=[{"tipe": "produk", **p} for p in products] if is_recommendation else [],
+            sources=sources,
             processing_time=time.perf_counter() - t_start,
-            retrieval_time=http_elapsed,
+            retrieval_time=retrieval_elapsed,
+            rerank_time=rerank_elapsed,
             generation_time=gen_elapsed,
         )
 
-    def _fetch_products_from_backend(
-        self,
-        filters: Dict,
-        limit: Optional[int] = None,
-    ) -> List[Dict]:
-        url = build_backend_url(BACKEND_PRODUCT_PATH)
-        params: Dict = {"limit": limit or PRODUCT_K}
-        if filters.get("keyword"):
-            params["keyword"] = filters["keyword"]
-        if filters.get("motif"):
-            params["motif"] = filters["motif"]
-        if filters.get("max_harga"):
-            params["max_harga"] = filters["max_harga"]
-
-        try:
-            r = requests.get(
-                url,
-                params=params,
-                headers=get_backend_headers(),
-                timeout=BACKEND_TIMEOUT,
-            )
-            r.raise_for_status()
-            data = r.json()
-
-            if isinstance(data, dict):
-                data = data.get("data") or data.get("items") or []
-            if not isinstance(data, list):
-                logger.warning(
-                    "[Product] Format respons backend tidak dikenali: %r",
-                    type(data),
-                )
-                return []
-            return data
-
-        except requests.exceptions.Timeout:
-            logger.warning(
-                "[Product] Backend timeout (%ds) → %s", BACKEND_TIMEOUT, url
-            )
-            return []
-        except requests.exceptions.RequestException as e:
-            logger.warning("[Product] Backend request gagal: %s", e)
-            return []
-        except Exception:
-            logger.exception("[Product] Error tak terduga saat memanggil backend")
-            return []
-
-    @staticmethod
-    def _rank_products_by_query(
-        query: str,
-        keyword: str,
-        products: List[Dict],
-        limit: int,
-    ) -> List[Dict]:
-        """Cocokkan token query ke nama produk, toko, dan atribut tanpa LLM."""
-        raw_source = keyword or query
-        tokens = [
-            t for t in re.findall(r"[a-z0-9]+", raw_source.lower())
-            if t not in {"batik", "kain", "produk"}
-        ]
-        if not tokens:
-            tokens = re.findall(r"[a-z0-9]+", raw_source.lower())
-
-        scored = []
-        for p in products:
-            name_text = f"{p.get('name', '')} {p.get('nama_motif', '')}".lower()
-            shop_text = str(p.get("nama_umkm", "")).lower()
-            attrs = p.get("additional_attribute") or {}
-            attr_text = " ".join(str(v) for v in attrs.values() if v is not None).lower()
-            desc_text = str(p.get("description", "")).lower()
-
-            score = 0
-            if keyword and keyword.lower() in name_text:
-                score += 10
-            if keyword and keyword.lower() in shop_text:
-                score += 8
-
-            name_words = set(re.findall(r"[a-z0-9]+", name_text))
-            shop_words = set(re.findall(r"[a-z0-9]+", shop_text))
-
-            for tok in tokens:
-                if tok in name_words:
-                    score += 4
-                elif len(tok) >= 3 and tok in name_text:
-                    score += 2
-                if tok in shop_words:
-                    score += 3
-                elif len(tok) >= 3 and tok in shop_text:
-                    score += 1
-                if len(tok) >= 3 and (tok in attr_text or tok in desc_text):
-                    score += 1
-
-            if score > 0:
-                scored.append((score, p))
-
-        scored.sort(key=lambda pair: pair[0], reverse=True)
-        return [p for _, p in scored[:limit]]
-
-    @staticmethod
-    def _fmt_meter(cm_val) -> str:
-        try:
-            m = float(cm_val) / 100.0
-            return f"{m:g}".replace(".", ",")
-        except (TypeError, ValueError):
-            return ""
-
-    @classmethod
-    def _format_products_for_llm(cls, products: List[Dict]) -> str:
-        if not products:
-            return "(tidak ada produk yang cocok)"
-
-        lines = []
-        for i, p in enumerate(products, 1):
-            harga_num = p.get("harga") or p.get("harga_per_meter")
-            harga = (
-                f"Rp{int(harga_num):,}".replace(",", ".")
-                if harga_num is not None and harga_num != "" else "-"
+        # Cache hanya untuk pure knowledge (tidak menyentuh DB)
+        if pure_kb_cache_key and resp.answer and resp.answer != _LLM_ERROR_ANSWER:
+            self.cache.set(
+                key=pure_kb_cache_key,
+                intent=response_intent,
+                query=query,
+                answer=resp.answer,
+                sources=resp.sources,
             )
 
-            attrs = p.get("additional_attribute")
-            if not isinstance(attrs, dict):
-                attrs = {}
-
-            parts = [
-                f"[{i}] {p.get('nama_motif', p.get('name', '-'))}",
-                f"toko: {p.get('nama_umkm', '-')}",
-                f"harga: {harga}",
-            ]
-
-            # Format ukuran lengkap (cm + konversi meter per lembar)
-            panjang = p.get("panjang_cm") if p.get("panjang_cm") is not None else attrs.get("panjang_cm")
-            lebar = p.get("lebar_cm") if p.get("lebar_cm") is not None else attrs.get("lebar_cm")
-            if panjang is not None and lebar is not None:
-                p_m = cls._fmt_meter(panjang)
-                l_m = cls._fmt_meter(lebar)
-                parts.append(f"ukuran: {panjang}x{lebar} cm ({p_m}x{l_m} m per lembar)")
-            elif panjang is not None:
-                parts.append(f"panjang: {panjang} cm ({cls._fmt_meter(panjang)} m)")
-            elif lebar is not None:
-                parts.append(f"lebar: {lebar} cm ({cls._fmt_meter(lebar)} m)")
-
-            # Atribut spesifikasi utama
-            motif = p.get("motif") or attrs.get("motif")
-            teknik = p.get("teknik") or attrs.get("teknik")
-            bahan = p.get("bahan") or attrs.get("bahan")
-            bentuk = p.get("bentuk") or attrs.get("bentuk")
-            berat = p.get("berat_gram") if p.get("berat_gram") is not None else attrs.get("berat_gram")
-            pewarna_alami = (
-                p.get("pewarna_alami")
-                if p.get("pewarna_alami") is not None
-                else attrs.get("pewarna_alami")
-            )
-
-            if motif:
-                parts.append(f"motif: {motif}")
-            if teknik:
-                parts.append(f"teknik: {teknik}")
-            if bahan:
-                parts.append(f"bahan: {bahan}")
-            if bentuk:
-                parts.append(f"bentuk: {bentuk}")
-            if berat is not None and berat != "":
-                parts.append(f"berat: {berat} gram")
-            if isinstance(pewarna_alami, bool):
-                parts.append(f"pewarna alami: {'Ya' if pewarna_alami else 'Tidak'}")
-
-            # Atribut tambahan lain yang mungkin diisi seller (misal ukuran baju, furing, dll.)
-            handled_keys = {
-                "motif", "teknik", "bahan", "bentuk",
-                "panjang_cm", "lebar_cm", "berat_gram", "pewarna_alami",
-            }
-            for k, v in attrs.items():
-                if k in handled_keys or v is None or str(v).strip() == "":
-                    continue
-                val_str = "Ya" if v is True else ("Tidak" if v is False else str(v))
-                parts.append(f"{k.replace('_', ' ')}: {val_str}")
-
-            desc = str(p.get("description") or "").strip()
-            if desc:
-                short_desc = desc[:160] + ("…" if len(desc) > 160 else "")
-                parts.append(f"deskripsi: {short_desc}")
-
-            parts.append(f"WA: {p.get('kontak_wa', '-')}")
-            parts.append(f"alamat: {p.get('alamat', '-')}")
-
-            lines.append(" | ".join(parts))
-
-        return "\n".join(lines)
-
-    _FILTER_STOPWORDS = {
-        "apa", "apakah", "ada", "aja", "alamat", "alamatnya", "atau",
-        "bagaimana", "bagus", "bahan", "bahannya", "barang", "bawah", "beli",
-        "benar", "bener", "bentuk", "bentuknya", "berarti", "berapa", "berat",
-        "beratnya", "betul", "bisa", "brp", "budget", "buat", "bukan",
-        "cari", "carikan", "cm", "coba", "daftar", "dan", "dari", "dengan",
-        "detail", "di", "dibawah", "dimana", "dong", "gak", "gimana", "gram",
-        "harga", "harganya", "idr", "info", "informasi", "ini", "itu", "iya",
-        "jadi", "jenis", "jual", "juta", "jt", "k", "kah", "kak", "kalau",
-        "kalo", "kan", "kasih", "ke", "kisaran", "kok", "kontak", "kurang",
-        "lebar", "lebarnya", "lembar", "link", "list", "mana", "maksimal",
-        "max", "mengenai", "meter", "min", "minta", "motif", "motifnya",
-        "murah", "nggak", "nih", "nya", "nomor", "order", "pakai", "panjang",
-        "panjangnya", "penjual", "per", "perlembar", "pesan", "pewarna",
-        "premium", "produk", "punya", "rb", "ready", "rekomendasi",
-        "rekomendasikan", "ribu", "rp", "saja", "sama", "sanggar", "satuan",
-        "saya", "semua", "seputar", "shopee", "sih", "spek", "spesifikasi",
-        "stok", "tadi", "tanya", "teknik", "tekniknya", "tentang", "terbaik",
-        "tersedia", "tersebut", "tidak", "toko", "tokonya", "tokopedia",
-        "tolong", "tuh", "ukuran", "ukurannya", "umkm", "untuk", "wa",
-        "whatsapp", "ya", "yah", "yang",
-    }
-
-    @classmethod
-    def _extract_product_filters(cls, query: str) -> Dict:
-        q_lower = query.lower()
-        filters: Dict = {}
-
-        # 1. Batas harga maksimal (misal: dibawah 300rb, max 250000)
-        m = re.search(
-            r"(?:dibawah|di bawah|max|maksimal|kurang dari|<)\s*(\d+)\s*(rb|ribu|k)?",
-            q_lower,
-        )
-        if m:
-            angka  = int(m.group(1))
-            satuan = m.group(2)
-            if satuan in ("rb", "ribu", "k"):
-                angka *= 1000
-            elif satuan is None and angka < 1000:
-                angka *= 1000
-            filters["max_harga"] = angka
-
-        # 2. Motif baku (jika disebut eksplisit)
-        MOTIF_KEYWORDS = {
-            "turonggo yakso":  "Turonggo Yakso",
-            "cengkehan":       "Cengkehan",
-            "gajah nungguk":   "Gajah Nungguk",
-            "pari srono":      "Pari Srono",
-            "manggis":         "Manggis",
-            "batu tumpuk":     "Batu Tumpuk",
-            "kopi trenggalek": "Kopi Trenggalek",
-        }
-        for key, val in MOTIF_KEYWORDS.items():
-            if key in q_lower:
-                filters["motif"] = val
-                break
-
-        # 3. Ekstrak keyword dinamis (mendukung nama produk/toko baru di DB seperti "Batik Tes 2")
-        cleaned = re.sub(
-            r"(?:dibawah|di bawah|max|maksimal|kurang dari|<)\s*\d+\s*(?:rb|ribu|k)?",
-            " ",
-            q_lower,
-        )
-        # Hapus nominal harga (misal 150k, 150rb, rp150.000, 150000) agar tidak mengotori keyword
-        cleaned = re.sub(r"\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta)\b", " ", cleaned)
-        cleaned = re.sub(r"\b(?:rp\.?\s*)?\d{4,}\b", " ", cleaned)
-        # Hapus angka ukuran/berat (misal 40cm, 2m, 2.4m, 350gr, 350gram)
-        cleaned = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:cm|mm|m|meter|gr|gram|kg)\b", " ", cleaned)
-
-        raw_tokens = re.findall(r"[a-z0-9]+", cleaned)
-        kept_tokens = [t for t in raw_tokens if t not in cls._FILTER_STOPWORDS]
-
-        # Jangan kirim keyword jika yang tersisa cuma kata umum "batik"/"kain"
-        specific_tokens = [t for t in kept_tokens if t not in {"batik", "kain"}]
-        if specific_tokens:
-            motif_tokens = set(re.findall(r"[a-z0-9]+", filters.get("motif", "").lower()))
-            if not (motif_tokens and set(specific_tokens).issubset(motif_tokens)):
-                filters["keyword"] = " ".join(kept_tokens[:4])
-
-        return filters
+        self._maybe_cleanup_cache()
+        return resp
 
     # ── Social ──────────────────────────────────────────────────────────
 
-    def _answer_social(self, query: str, t_start: float) -> RAGResponse:
+    def _answer_social(self, analysis: QueryAnalysis, t_start: float) -> RAGResponse:
+        cache_key = hashlib.md5(
+            f"social:{analysis.language}:{analysis.normalized}".encode("utf-8")
+        ).hexdigest()
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return RAGResponse(
+                answer=cached["answer"],
+                intent="social",
+                sources=[],
+                processing_time=time.perf_counter() - t_start,
+            )
+
+        system_prompt = (
+            f"{self._base_system_prompt(_FALLBACK_INSTRUCTIONS, _FALLBACK_GUARD_RAILS, analysis.language)}\n\n"
+            "Jawab sapaan atau obrolan singkat dengan ramah, santai, dan tidak kaku."
+        )
         messages = [
-            {"role": "system", "content": self._social_system_prompt()},
-            {"role": "user",   "content": query},
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": analysis.raw},
         ]
+
         t_gen = time.perf_counter()
         answer = self.models.llm.generate(
             messages,
@@ -822,6 +1226,15 @@ class HarnessPipeline:
         )
         gen_elapsed = time.perf_counter() - t_gen
 
+        if answer and answer != _LLM_ERROR_ANSWER:
+            self.cache.set(
+                key=cache_key,
+                intent="social",
+                query=analysis.raw,
+                answer=answer,
+                sources=[],
+            )
+
         return RAGResponse(
             answer=answer,
             intent="social",
@@ -829,238 +1242,6 @@ class HarnessPipeline:
             processing_time=time.perf_counter() - t_start,
             generation_time=gen_elapsed,
         )
-
-    # ── Knowledge ───────────────────────────────────────────────────────
-
-    def _answer_knowledge(self, query: str, t_start: float) -> RAGResponse:
-        t_emb = time.perf_counter()
-        query_emb = self.models.embed(query)
-        logger.info(
-            "[Knowledge] embed selesai (%.3fs)", time.perf_counter() - t_emb
-        )
-
-        t_ret = time.perf_counter()
-        candidates = self.chroma.retrieve(query_emb, k=MAX_CHROMA_K)
-        retrieval_elapsed = time.perf_counter() - t_ret
-        logger.info(
-            "[Knowledge] %d kandidat (%.3fs)", len(candidates), retrieval_elapsed
-        )
-
-        if not candidates:
-            return RAGResponse(
-                answer="Maaf, tidak menemukan informasi relevan di knowledge base.",
-                intent="knowledge",
-                sources=[],
-                processing_time=time.perf_counter() - t_start,
-                retrieval_time=retrieval_elapsed,
-            )
-
-        t_rr = time.perf_counter()
-        rerank_scores = self.models.rerank(
-            query, [c.konten_chunk for c in candidates]
-        )
-
-        reranked: List[RerankedChunk] = []
-        for c, s in zip(candidates, rerank_scores):
-            reranked.append(RerankedChunk(
-                isi_id=c.isi_id,
-                konten_chunk=c.konten_chunk,
-                vector_score=c.vector_score,
-                rerank_score=float(s),
-            ))
-
-        reranked.sort(key=lambda x: x.rerank_score, reverse=True)
-        top_chunks: List[RerankedChunk] = reranked[:RERANKED_K]
-
-        rerank_elapsed = time.perf_counter() - t_rr
-        logger.info(
-            "[Knowledge] rerank → top %d (%.3fs)  best=%.4f  worst=%.4f",
-            len(top_chunks), rerank_elapsed,
-            top_chunks[0].rerank_score,
-            top_chunks[-1].rerank_score,
-        )
-
-        context_str = "\n\n".join(
-            f"[{i}] {c.konten_chunk}" for i, c in enumerate(top_chunks, 1)
-        )
-
-        instructions_text = self._retrieve_rules(
-            self.instruction_col, query_emb, INSTRUCTION_K, _FALLBACK_INSTRUCTIONS
-        )
-        guard_rails_text = self._retrieve_rules(
-            self.guard_rails_col, query_emb, GUARDRAILS_K, _FALLBACK_GUARD_RAILS
-        )
-
-        system_prompt = self._knowledge_system_prompt(
-            context_str, instructions_text, guard_rails_text
-        )
-
-        logger.info(
-            "[Knowledge] breakdown chars | instructions=%d | guard_rails=%d | context=%d | query=%d | TOTAL=%d (~%d est. tokens)",
-            len(instructions_text),
-            len(guard_rails_text),
-            len(context_str),
-            len(query),
-            len(system_prompt) + len(query),
-            (len(system_prompt) + len(query)) // 3,
-        )
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": query},
-        ]
-
-        t_gen = time.perf_counter()
-        answer = self.models.llm.generate(
-            messages,
-            temperature=KNOWLEDGE_TEMP,
-            top_p=KNOWLEDGE_TOP_P,
-            max_tokens=KNOWLEDGE_MAX_TOKENS,
-        )
-        gen_elapsed = time.perf_counter() - t_gen
-
-        sources = [
-            {
-                "isi_id":       c.isi_id,
-                "vector_score": f"{c.vector_score:.4f}",
-                "rerank_score": f"{c.rerank_score:.4f}",
-                "preview":      c.konten_chunk[:200]
-                                + ("…" if len(c.konten_chunk) > 200 else ""),
-            }
-            for c in top_chunks
-        ]
-
-        return RAGResponse(
-            answer=answer,
-            intent="knowledge",
-            sources=sources,
-            processing_time=time.perf_counter() - t_start,
-            retrieval_time=retrieval_elapsed,
-            rerank_time=rerank_elapsed,
-            generation_time=gen_elapsed,
-        )
-
-    # ── Intent detection ───────────────────────────────────────────────
-
-    _PRODUCT_PHRASES = {
-        "rekomendasi batik", "rekomendasikan batik", "batik bagus",
-        "batik murah", "batik premium", "cari batik", "carikan batik",
-        "beli batik", "order batik", "pesan batik",
-        "dimana beli batik", "di mana beli batik",
-        "penjual batik", "toko batik", "umkm batik",
-        "harga batik", "batik berapa",
-        "berapa meter", "per lembar", "perlembar",
-        "ukuran batik", "ukuran kain", "panjang kain", "lebar kain",
-        "spesifikasi batik", "spesifikasi produk", "detail produk",
-    }
-    _PRODUCT_ACTIONS = {
-        "rekomendasi", "rekomendasikan", "carikan",
-        "beli", "order", "pesan", "cari", "jual",
-    }
-    _PRODUCT_SPEC_WORDS = {
-        "harga", "harganya", "brp", "meter", "cm", "ukuran", "ukurannya",
-        "panjang", "panjangnya", "lebar", "lebarnya", "perlembar", "lembar",
-        "berat", "beratnya", "gram", "stok", "ready", "tersedia",
-        "spek", "spesifikasi", "toko", "tokonya", "sanggar", "umkm",
-        "wa", "whatsapp", "kontak", "alamat", "link", "shopee", "tokopedia",
-    }
-    _PURE_KNOWLEDGE_SIGNALS = (
-        "filosofi", "sejarah", "makna", "asal usul", "asal-usul",
-        "cara merawat", "cara mencuci", "perawatan", "proses pembuatan",
-        "perbedaan", "bedanya", "pengertian", "definisi", "apa itu",
-    )
-    _SOCIAL_PHRASES = {
-        "selamat pagi", "selamat siang", "selamat sore", "selamat malam",
-        "terima kasih", "makasih banyak", "apa kabar", "sugeng rawuh",
-        "sugeng enjang", "sampai jumpa", "dadah", "permisi",
-    }
-    _SOCIAL_WORDS = {
-        "halo", "hai", "hello", "hi", "hey", "hei", "pagi", "siang",
-        "sore", "malam", "makasih", "thanks", "thank", "oke", "ok",
-        "sip", "siap", "mantap", "bye", "assalamualaikum", "p",
-    }
-    _KNOWLEDGE_WORDS = {
-        "apa", "siapa", "kapan", "dimana", "mengapa", "kenapa", "bagaimana",
-        "gimana", "jelaskan", "ceritakan", "filosofi", "sejarah", "makna",
-        "motif", "batik", "trenggalek", "tulis", "cap", "rawat", "merawat",
-        "cuci", "mencuci", "canting", "malam", "sogan", "pewarna",
-    }
-
-    @classmethod
-    def _detect_intent(cls, text: str) -> str:
-        normalized = text.lower().strip()
-        tokens = set(re.findall(r"[a-z0-9]+", normalized))
-
-        is_pure_knowledge = any(sig in normalized for sig in cls._PURE_KNOWLEDGE_SIGNALS)
-        has_commerce_intent = bool(
-            tokens & (
-                cls._PRODUCT_ACTIONS
-                | {"harga", "harganya", "beli", "order", "pesan", "wa", "whatsapp", "toko", "sanggar"}
-            )
-        )
-
-        # Lindungi pertanyaan pengetahuan murni (filosofi/sejarah/perawatan)
-        if is_pure_knowledge and not has_commerce_intent:
-            return "knowledge"
-
-        # ── Product (prioritas tertinggi) ──────────────────────────────
-        for phrase in cls._PRODUCT_PHRASES:
-            if phrase in normalized:
-                return "product"
-
-        if (tokens & cls._PRODUCT_ACTIONS) and (
-            "batik" in normalized or "kain" in normalized or "produk" in normalized
-        ):
-            return "product"
-
-        # Pertanyaan spesifikasi produk (ukuran, panjang, meter, berat, harga, toko, WA)
-        if tokens & cls._PRODUCT_SPEC_WORDS:
-            if (
-                "batik" in normalized
-                or "kain" in normalized
-                or "produk" in normalized
-                or "toko" in normalized
-                or "sanggar" in normalized
-                or bool(tokens & {"ini", "itu", "tersebut"})
-            ):
-                return "product"
-
-        # Pertanyaan bahan/teknik/motif yang menunjuk produk spesifik ("batik a ini bahannya apa?")
-        if (
-            ("batik" in normalized or "kain" in normalized or "produk" in normalized)
-            and bool(tokens & {"bahan", "bahannya", "teknik", "tekniknya", "pewarna", "bentuk"})
-            and bool(tokens & {"ini", "itu", "tersebut"})
-        ):
-            return "product"
-
-        if any(m in normalized for m in (
-            "turonggo yakso", "cengkehan", "gajah nungguk", "pari srono",
-            "manggis", "batu tumpuk", "kopi trenggalek",
-        )):
-            if tokens & (cls._PRODUCT_ACTIONS | cls._PRODUCT_SPEC_WORDS | {"bahan", "bahannya", "teknik", "dimana"}):
-                return "product"
-
-        if "batik" in normalized and re.search(
-            r"\b(?:rp\.?\s*|idr\s*)?\d+(?:[.,]\d+)?\s*(?:rb|ribu|k|jt|juta)?\b",
-            normalized,
-        ):
-            if re.search(r"\b(?:rp\.?\s*|idr\s*)?\d+(?:[.,]\d+)?\s*(?:rb|ribu|k|jt|juta)\b|\b\d{4,}\b", normalized):
-                return "product"
-
-        # ── Social ─────────────────────────────────────────────────────
-        for phrase in cls._SOCIAL_PHRASES:
-            if phrase in normalized:
-                return "social"
-        if tokens & cls._SOCIAL_WORDS and not (tokens & cls._KNOWLEDGE_WORDS):
-            return "social"
-
-        # ── Knowledge ──────────────────────────────────────────────────
-        if "?" in text:
-            return "knowledge"
-        if tokens & cls._KNOWLEDGE_WORDS:
-            return "knowledge"
-
-        return "knowledge"
 
 
 # =========================================================================

@@ -198,6 +198,7 @@ def _serialize_product(
                 "instagram": shop.instagram,
                 "online_shop": shop.online_shop,
                 "gmaps": shop.gmaps,
+                "description": shop.description,
             }
             if shop
             else None
@@ -759,6 +760,7 @@ def search_public_products(
                     Product.name.ilike(kw),
                     Product.description.ilike(kw),
                     Shop.name.ilike(kw),
+                    Shop.description.ilike(kw),
                     cast(Product.additional_attribute, String).ilike(kw),
                 )
             )
@@ -882,8 +884,9 @@ def search_products_for_harness(
             "harga_per_meter": harga_int,
             "kontak_wa": shop.get("number") or "-",
             "alamat": shop.get("address") or "-",
-            # Spesifikasi lengkap & deskripsi untuk Q&A CS
+            # Spesifikasi lengkap, deskripsi/filosofi produk & profil toko untuk CS
             "description": (item.get("description") or "").strip(),
+            "shop_description": (shop.get("description") or "").strip(),
             "additional_attribute": attrs,
             "motif": motif_val,
             "teknik": attrs.get("teknik"),

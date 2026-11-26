@@ -1,0 +1,15 @@
+dotenv
+fastapi
+itsdangerous
+uvicorn
+authlib
+httpx
+PyJWT
+sqlalchemy
+pymysql
+requests
+python-multipart
+torch torchvision --index-url https://download.pytorch.org/whl/cu132
+chromadb
+sentence_transformers
+groq
