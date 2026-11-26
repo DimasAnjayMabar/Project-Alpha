@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import {
-  Check,
   MessageCircle,
   BookOpen,
   Search,
@@ -11,6 +10,8 @@ import {
   Store,
   ArrowRight,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   RotateCcw,
   Loader2,
@@ -32,7 +33,6 @@ const BatikChatbotWidget = lazy(() => import('./components/BatikChatbotWidget'))
 
 export default function UserCatalogPage({
   initialFocusShopId = null,
-  onOpenSellerPortal,
 } = {}) {
   // State Data Backend
   const [catalogData, setCatalogData] = useState({
@@ -43,7 +43,6 @@ export default function UserCatalogPage({
   });
   const [loadStatus, setLoadStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
   const [loadError, setLoadError] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State Pencarian & Filter Multi-Atribut
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,15 +59,16 @@ export default function UserCatalogPage({
   const [activeModel, setActiveModel] = useState('fabric');
   const [bookPageIndex, setBookPageIndex] = useState(0);
   const [highlightedProductId, setHighlightedProductId] = useState(null);
-  const [customWaMap, setCustomWaMap] = useState({});
 
   // State Menu & Popover Header
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sanggarContactOpen, setSanggarContactOpen] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
+  const [heroSlideIdx, setHeroSlideIdx] = useState(0);
+  const [heroInteracting, setHeroInteracting] = useState(false);
 
   const headerRef = useRef(null);
   const didAutoFocusRef = useRef(false);
+  const heroSwipeRef = useRef({ active: false, startX: 0, startY: 0 });
 
   const [gridCols, setGridCols] = useState(() => {
     if (typeof window === 'undefined') return 3;
@@ -77,73 +77,50 @@ export default function UserCatalogPage({
     return 1;
   });
 
-  const showToast = useCallback((msg) => {
-    setToastMsg(msg);
-    setTimeout(() => {
-      setToastMsg((prev) => (prev === msg ? '' : prev));
-    }, 2800);
-  }, []);
-
   // Muat data sanggar, kategori, dan produk aktif dari backend port 3002
-  const loadCatalog = useCallback(
-    async ({ silent = false } = {}) => {
-      if (silent) {
-        setIsRefreshing(true);
-      } else {
-        setLoadStatus('loading');
-        setLoadError('');
+  const loadCatalog = useCallback(async () => {
+    setLoadStatus('loading');
+    setLoadError('');
+
+    try {
+      const data = await fetchUserCatalogData();
+      setCatalogData(data);
+
+      const focusedBook = initialFocusShopId
+        ? data.shopBooks.find((b) => b.shop.id === initialFocusShopId)
+        : null;
+
+      setSelectedBookShopId((prev) => {
+        if (focusedBook) return focusedBook.shop.id;
+        if (prev && data.shopBooks.some((b) => b.shop.id === prev)) return prev;
+        return data.shopBooks[0]?.shop.id || null;
+      });
+
+      setActiveProductId((prev) => {
+        if (prev && data.enrichedProducts.some((p) => p.id === prev)) return prev;
+        if (focusedBook?.products?.[0]) return focusedBook.products[0].id;
+        return data.enrichedProducts[0]?.id || null;
+      });
+
+      if (focusedBook && !didAutoFocusRef.current) {
+        didAutoFocusRef.current = true;
+        setBookPageIndex(1);
+        setTimeout(() => {
+          const el = document.getElementById('buku-katalog');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 120);
       }
 
-      try {
-        const data = await fetchUserCatalogData();
-        setCatalogData(data);
-
-        const focusedBook = initialFocusShopId
-          ? data.shopBooks.find((b) => b.shop.id === initialFocusShopId)
-          : null;
-
-        setSelectedBookShopId((prev) => {
-          if (focusedBook) return focusedBook.shop.id;
-          if (prev && data.shopBooks.some((b) => b.shop.id === prev)) return prev;
-          return data.shopBooks[0]?.shop.id || null;
-        });
-
-        setActiveProductId((prev) => {
-          if (prev && data.enrichedProducts.some((p) => p.id === prev)) return prev;
-          if (focusedBook?.products?.[0]) return focusedBook.products[0].id;
-          return data.enrichedProducts[0]?.id || null;
-        });
-
-        if (focusedBook && !didAutoFocusRef.current) {
-          didAutoFocusRef.current = true;
-          setBookPageIndex(focusedBook.products.length > 0 ? 1 : 0);
-          setTimeout(() => {
-            const el = document.getElementById('buku-katalog');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }, 120);
-        }
-
-        setLoadStatus('ready');
-        setLoadError('');
-        if (silent) {
-          showToast('Data katalog berhasil diperbarui dari database.');
-        }
-      } catch (err) {
-        const msg =
-          err?.message ||
-          'Tidak dapat terhubung ke server backend. Pastikan server backend (port 3002) sedang aktif.';
-        setLoadError(msg);
-        if (!silent) {
-          setLoadStatus('error');
-        } else {
-          showToast(msg);
-        }
-      } finally {
-        if (silent) setIsRefreshing(false);
-      }
-    },
-    [initialFocusShopId, showToast]
-  );
+      setLoadStatus('ready');
+      setLoadError('');
+    } catch (err) {
+      const msg =
+        err?.message ||
+        'Tidak dapat terhubung ke server backend. Pastikan server backend (port 3002) sedang aktif.';
+      setLoadError(msg);
+      setLoadStatus('error');
+    }
+  }, [initialFocusShopId]);
 
   useEffect(() => {
     didAutoFocusRef.current = false;
@@ -181,18 +158,7 @@ export default function UserCatalogPage({
     };
   }, []);
 
-  const getEffectiveWa = useCallback(
-    (shopId, fallbackWa) => customWaMap[shopId] || fallbackWa || '',
-    [customWaMap]
-  );
-
-  const handleUpdateShopWa = useCallback(
-    (shopId, newWa) => {
-      setCustomWaMap((prev) => ({ ...prev, [shopId]: newWa }));
-      showToast('Nomor WhatsApp sanggar diperbarui untuk sesi ini.');
-    },
-    [showToast]
-  );
+  const getEffectiveWa = useCallback((_shopId, fallbackWa) => fallbackWa || '', []);
 
   const { activeShops, categories, enrichedProducts, shopBooks } = catalogData;
 
@@ -319,12 +285,18 @@ export default function UserCatalogPage({
       setActiveProductId(productId);
 
       const bentuk = String(prod?.additional_attribute?.bentuk || '').toLowerCase();
-      if (
-        prod?.category?.slug === 'kemeja-batik-jadi' ||
-        /baju|kemeja|hem|blouse|dress/.test(bentuk)
+      const prodName = String(prod?.name || '').toLowerCase();
+      const catSlug = String(prod?.category?.slug || '').toLowerCase();
+      const combined = `${bentuk} ${prodName} ${catSlug}`;
+
+      if (/kebaya|kutubaru|kartini|encim|blouse|blus/.test(combined)) {
+        setActiveModel('kebaya');
+      } else if (
+        catSlug === 'kemeja-batik-jadi' ||
+        /baju|kemeja|hem|dress/.test(combined)
       ) {
         setActiveModel('shirt');
-      } else if (/tas|selendang|syal/.test(bentuk)) {
+      } else if (/tas|selendang|syal/.test(combined)) {
         setActiveModel('tote');
       } else {
         setActiveModel('fabric');
@@ -344,9 +316,9 @@ export default function UserCatalogPage({
 
       if (productId && book) {
         const idxInBook = book.products.findIndex((p) => p.id === productId);
-        setBookPageIndex(idxInBook >= 0 ? idxInBook + 1 : book.products.length > 0 ? 1 : 0);
+        setBookPageIndex(idxInBook >= 0 ? idxInBook + 2 : 1);
       } else {
-        setBookPageIndex(book && book.products.length > 0 ? 1 : 0);
+        setBookPageIndex(1);
       }
 
       const el = document.getElementById('buku-katalog');
@@ -355,10 +327,65 @@ export default function UserCatalogPage({
     [shopBooks]
   );
 
-  const activeHighlightProduct = useMemo(
-    () => enrichedProducts.find((p) => p.id === activeProductId) || enrichedProducts[0] || null,
-    [enrichedProducts, activeProductId]
+  const heroSlides = useMemo(() => {
+    const picked = [];
+    const seenIds = new Set();
+
+    shopBooks.forEach((bk) => {
+      if (picked.length >= 6) return;
+      const lead = bk.products?.[0];
+      if (lead && !seenIds.has(lead.id)) {
+        picked.push(lead);
+        seenIds.add(lead.id);
+      }
+    });
+
+    enrichedProducts.forEach((p) => {
+      if (picked.length >= 6) return;
+      if (!seenIds.has(p.id)) {
+        picked.push(p);
+        seenIds.add(p.id);
+      }
+    });
+
+    return picked;
+  }, [shopBooks, enrichedProducts]);
+
+  const safeHeroIdx = heroSlides.length > 0 ? heroSlideIdx % heroSlides.length : 0;
+  const currentHeroSlide = heroSlides[safeHeroIdx] || null;
+
+  useEffect(() => {
+    if (heroSlides.length <= 1 || heroInteracting) return undefined;
+    const timer = setInterval(() => {
+      setHeroSlideIdx((prev) => (prev + 1) % heroSlides.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [heroSlides.length, heroInteracting]);
+
+  const stepHeroSlide = useCallback(
+    (delta) => {
+      if (heroSlides.length <= 1) return;
+      setHeroSlideIdx((prev) => (prev + delta + heroSlides.length) % heroSlides.length);
+    },
+    [heroSlides.length]
   );
+
+  const handleHeroPointerDown = (e) => {
+    if (heroSlides.length <= 1) return;
+    if (e.target.closest('button, a')) return;
+    heroSwipeRef.current = { active: true, startX: e.clientX, startY: e.clientY };
+  };
+
+  const handleHeroPointerUp = (e) => {
+    const swipe = heroSwipeRef.current;
+    if (!swipe.active) return;
+    swipe.active = false;
+    const dx = e.clientX - swipe.startX;
+    const dy = e.clientY - swipe.startY;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dx < 0) stepHeroSlide(1);
+    else stepHeroSlide(-1);
+  };
 
   // State 1: Memuat data dari backend
   if (loadStatus === 'loading') {
@@ -395,15 +422,6 @@ export default function UserCatalogPage({
               <RefreshCw className="w-4 h-4" />
               <span>Coba Lagi</span>
             </button>
-            {onOpenSellerPortal && (
-              <button
-                type="button"
-                onClick={onOpenSellerPortal}
-                className="taste-btn-secondary"
-              >
-                <span>Portal Perajin</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -412,16 +430,6 @@ export default function UserCatalogPage({
 
   return (
     <div className="min-h-screen bg-[#F7F4EE] text-[#1C1917] font-sans selection:bg-[#7C3219] selection:text-white">
-      {toastMsg && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-20 right-5 z-50 px-4 py-3 rounded-md bg-[#1B1714] text-[#F5F1E8] text-[13px] font-medium shadow-lg flex items-center gap-2.5 border border-white/15 fade-panel"
-        >
-          <Check className="w-4 h-4 text-[#C4A46B] shrink-0" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
 
       {/* 1. NAVBAR */}
       <header
@@ -434,21 +442,11 @@ export default function UserCatalogPage({
           </a>
 
           <a href="#konten-utama" className="flex items-center gap-3 shrink-0">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 32 32"
-              fill="none"
-              aria-hidden="true"
-              className="shrink-0"
-            >
-              <path d="M16 4L28 16L16 28L4 16L16 4Z" stroke="#7C3219" strokeWidth="2" />
-              <circle cx="16" cy="16" r="3.5" fill="#7C3219" />
-              <circle cx="16" cy="9.5" r="1.4" fill="#1C1917" />
-              <circle cx="16" cy="22.5" r="1.4" fill="#1C1917" />
-              <circle cx="9.5" cy="16" r="1.4" fill="#1C1917" />
-              <circle cx="22.5" cy="16" r="1.4" fill="#1C1917" />
-            </svg>
+            <img
+              src="/favicon.png"
+              alt="Logo Batik Wicara"
+              className="w-9 h-9 object-contain shrink-0 drop-shadow-[0_1px_1px_rgba(28,25,23,0.22)]"
+            />
             <div className="leading-none">
               <span className="font-aksara text-[22px] sm:text-[25px] text-[#1C1917] block">
                 Batik Wicara
@@ -472,15 +470,6 @@ export default function UserCatalogPage({
             <a href="#mockup-3d" className="taste-nav-link">
               Studio 3D
             </a>
-            {onOpenSellerPortal && (
-              <button
-                type="button"
-                onClick={onOpenSellerPortal}
-                className="taste-nav-link text-[#575049] hover:text-[#1C1917] cursor-pointer"
-              >
-                Portal Perajin
-              </button>
-            )}
           </nav>
 
           {/* Aksi Header: Kontak WhatsApp Sanggar */}
@@ -493,8 +482,7 @@ export default function UserCatalogPage({
                 className="taste-btn-wa"
               >
                 <MessageCircle className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">Kontak Sanggar</span>
-                <span className="sm:hidden">WhatsApp</span>
+                <span>WhatsApp</span>
                 <ChevronDown
                   className={`w-4 h-4 transition-transform ${
                     sanggarContactOpen ? 'rotate-180' : ''
@@ -602,18 +590,6 @@ export default function UserCatalogPage({
             >
               Studio Mockup 3D
             </a>
-            {onOpenSellerPortal && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenSellerPortal();
-                }}
-                className="min-h-[48px] flex items-center text-left text-[15px] font-medium text-[#7C3219] cursor-pointer"
-              >
-                Portal Perajin UMKM
-              </button>
-            )}
           </nav>
         )}
       </header>
@@ -679,38 +655,107 @@ export default function UserCatalogPage({
               </div>
             </div>
 
-            {activeHighlightProduct && (
-              <div className="lg:col-span-6">
-                <div className="aspect-[4/3] rounded-lg overflow-hidden border border-[#1C1917]/12 bg-[#FCFBF8]">
-                  <div className="w-full h-full hero-enter-media">
-                    <ProductArtwork
-                      product={activeHighlightProduct}
-                      imageUrl={activeHighlightProduct.primaryImageUrl}
-                      size={640}
-                      className="w-full h-full"
-                    />
+            {currentHeroSlide && (
+              <div
+                className="lg:col-span-6"
+                onMouseEnter={() => setHeroInteracting(true)}
+                onMouseLeave={() => setHeroInteracting(false)}
+                onFocus={() => setHeroInteracting(true)}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget)) {
+                    setHeroInteracting(false);
+                  }
+                }}
+              >
+                <div
+                  onPointerDown={handleHeroPointerDown}
+                  onPointerUp={handleHeroPointerUp}
+                  onPointerCancel={() => {
+                    heroSwipeRef.current.active = false;
+                  }}
+                  className="relative aspect-[4/3] rounded-lg overflow-hidden border border-[#1C1917]/12 bg-[#FCFBF8] touch-pan-y select-none hero-enter-media"
+                >
+                  <div
+                    style={{ transform: `translateX(-${safeHeroIdx * 100}%)` }}
+                    className="flex h-full transition-transform duration-500 ease-out will-change-transform"
+                  >
+                    {heroSlides.map((slide) => (
+                      <div key={slide.id} className="w-full h-full shrink-0">
+                        <ProductArtwork
+                          product={slide}
+                          imageUrl={slide.primaryImageUrl}
+                          size={640}
+                          className="w-full h-full"
+                        />
+                      </div>
+                    ))}
                   </div>
+
+                  {heroSlides.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => stepHeroSlide(-1)}
+                        aria-label="Produk sorotan sebelumnya"
+                        className="w-10 h-10 rounded-full bg-[#FCFBF8]/92 hover:bg-[#FCFBF8] border border-[#1C1917]/15 shadow-md text-[#1C1917] flex items-center justify-center absolute top-1/2 -translate-y-1/2 left-3 z-10 cursor-pointer transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => stepHeroSlide(1)}
+                        aria-label="Produk sorotan berikutnya"
+                        className="w-10 h-10 rounded-full bg-[#FCFBF8]/92 hover:bg-[#FCFBF8] border border-[#1C1917]/15 shadow-md text-[#1C1917] flex items-center justify-center absolute top-1/2 -translate-y-1/2 right-3 z-10 cursor-pointer transition-colors"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="pt-4 flex flex-wrap items-center justify-between gap-3 hero-enter-step-2">
-                  <div>
+                  <div key={currentHeroSlide.id} className="fade-swap">
                     <p className="font-serif text-[20px] font-medium text-[#1C1917] leading-snug">
-                      {activeHighlightProduct.name}
+                      {currentHeroSlide.name}
                     </p>
                     <p className="text-[14px] text-[#575049] tabular-nums mt-0.5">
-                      {activeHighlightProduct.shop.name} ·{' '}
-                      {formatRupiah(activeHighlightProduct.price)}
+                      {currentHeroSlide.shop.name} ·{' '}
+                      {formatRupiah(currentHeroSlide.price)}
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleTryIn3D(activeHighlightProduct.id)}
+                    onClick={() => handleTryIn3D(currentHeroSlide.id)}
                     className="taste-link text-[14px] font-medium text-[#7C3219] min-h-[44px] cursor-pointer"
                   >
                     <span>Simulasi 3D</span>
                     <ArrowRight className="w-4 h-4 m-arrow" />
                   </button>
                 </div>
+
+                {heroSlides.length > 1 && (
+                  <div className="pt-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5">
+                      {heroSlides.map((slide, idx) => (
+                        <button
+                          key={slide.id}
+                          type="button"
+                          onClick={() => setHeroSlideIdx(idx)}
+                          aria-label={`Lihat sorotan ${idx + 1}: ${slide.name}`}
+                          className={`h-2 rounded-full transition-all cursor-pointer ${
+                            idx === safeHeroIdx
+                              ? 'w-6 bg-[#7C3219]'
+                              : 'w-2 bg-[#1C1917]/20 hover:bg-[#7C3219]/50'
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="text-[12.5px] text-[#575049] tabular-nums">
+                      {safeHeroIdx + 1} / {heroSlides.length}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -726,7 +771,6 @@ export default function UserCatalogPage({
           onChangeBookPage={setBookPageIndex}
           onTryIn3D={handleTryIn3D}
           getEffectiveWa={getEffectiveWa}
-          onUpdateShopWa={handleUpdateShopWa}
         />
 
         {/* 4. ETALASE KATALOG TERKELOMPOK PER SANGGAR */}
@@ -913,7 +957,7 @@ export default function UserCatalogPage({
                 </p>
                 <p className="text-[14px] text-[#575049]">
                   {enrichedProducts.length === 0
-                    ? 'Produk yang diterbitkan oleh sanggar melalui Portal Perajin akan otomatis tampil di sini.'
+                    ? 'Koleksi batik dari sanggar UMKM Kabupaten Trenggalek akan segera tampil di sini.'
                     : 'Tidak ada batik yang cocok dengan kombinasi filter saat ini.'}
                 </p>
                 {hasActiveFilters && (
@@ -1016,13 +1060,6 @@ export default function UserCatalogPage({
                                   )
                                 : '';
 
-                              const typeAttr = (prod.formattedAttributes || []).find((a) =>
-                                /jenis|tipe|teknik|proses/i.test(`${a.name} ${a.label}`)
-                              );
-                              const matAttr = (prod.formattedAttributes || []).find((a) =>
-                                /bahan|material|kain/i.test(`${a.name} ${a.label}`)
-                              );
-
                               return (
                                 <div
                                   key={prod.id}
@@ -1053,22 +1090,6 @@ export default function UserCatalogPage({
                                         <h4 className="font-serif text-[20px] font-medium text-[#1C1917] leading-snug">
                                           {prod.name}
                                         </h4>
-
-                                        {/* Badge Tipe Batik & Material */}
-                                        {(typeAttr || matAttr) && (
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {typeAttr && (
-                                              <span className="taste-badge-indigo">
-                                                {typeAttr.displayValue}
-                                              </span>
-                                            )}
-                                            {matAttr && (
-                                              <span className="taste-badge-gold">
-                                                {matAttr.displayValue}
-                                              </span>
-                                            )}
-                                          </div>
-                                        )}
 
                                         <p className="text-[14px] text-[#575049] line-clamp-2 leading-relaxed">
                                           {prod.description || 'Karya batik khas Kabupaten Trenggalek.'}
@@ -1207,36 +1228,17 @@ export default function UserCatalogPage({
                     Studio Mockup 3D
                   </a>
                 </li>
-                {onOpenSellerPortal && (
-                  <li>
-                    <button
-                      type="button"
-                      onClick={onOpenSellerPortal}
-                      className="taste-nav-link text-[#F5F1E8] cursor-pointer"
-                    >
-                      Portal Perajin UMKM
-                    </button>
-                  </li>
-                )}
               </ul>
             </div>
 
             <div className="md:col-span-3 space-y-3">
-              <h3 className="text-[13px] font-medium text-[#B5ACA2]">Sinkronisasi Katalog</h3>
+              <h3 className="text-[13px] font-medium text-[#B5ACA2]">Sentra UMKM</h3>
               <p className="text-[13px] text-[#B5ACA2] leading-relaxed">
-                Data sanggar dan produk dimuat langsung dari server database Batik Wicara.
+                Menghubungkan pengunjung langsung dengan perajin batik asli Kabupaten Trenggalek.
               </p>
-              <button
-                type="button"
-                onClick={() => loadCatalog({ silent: true })}
-                disabled={isRefreshing}
-                className="inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 rounded-[10px] border border-white/18 text-[13px] font-medium text-[#F5F1E8] hover:bg-white/10 disabled:opacity-60 transition-colors cursor-pointer"
-              >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 text-[#C4A46B] ${isRefreshing ? 'animate-spin' : ''}`}
-                />
-                <span>{isRefreshing ? 'Memuat Ulang...' : 'Segarkan Katalog'}</span>
-              </button>
+              <p className="text-[13px] font-medium text-[#F5F1E8] tabular-nums">
+                {activeShops.length} sanggar aktif · {enrichedProducts.length} koleksi
+              </p>
             </div>
           </div>
 

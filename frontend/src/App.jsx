@@ -84,7 +84,6 @@ export default function App() {
     <UserCatalogPage
       key={focusShopId || 'default'}
       initialFocusShopId={focusShopId}
-      onOpenSellerPortal={navigateToSellerPortal}
     />
   );
 }

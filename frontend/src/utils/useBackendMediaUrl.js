@@ -5,62 +5,72 @@ import {
   fetchBackendMediaBlobUrl,
 } from './url_controller';
 
+const mediaUrlCache = new Map();
+const inflightMediaRequests = new Map();
+
+function getImmediateMediaUrl(rawUrl) {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+  const normalizedUrl = resolveBackendMediaUrl(trimmed);
+  if (!normalizedUrl) return '';
+  return mediaUrlCache.get(normalizedUrl) || '';
+}
+
 export function useBackendMediaUrl(rawUrl) {
-  const [resolvedUrl, setResolvedUrl] = useState('');
-  const [failed, setFailed] = useState(false);
+  const [mediaState, setMediaState] = useState(() => ({
+    rawUrl,
+    url: getImmediateMediaUrl(rawUrl),
+    failed: false,
+  }));
 
   useEffect(() => {
     const trimmed = String(rawUrl || '').trim();
-    if (!trimmed) {
-      setResolvedUrl('');
-      setFailed(false);
-      return undefined;
-    }
-
-    // URL pratinjau lokal (URL.createObjectURL / base64) langsung dipakai tanpa fetch
-    if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
-      setResolvedUrl(trimmed);
-      setFailed(false);
+    if (!trimmed || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
       return undefined;
     }
 
     const normalizedUrl = resolveBackendMediaUrl(trimmed);
-    if (!normalizedUrl) {
-      setResolvedUrl('');
-      setFailed(false);
+    if (!normalizedUrl || mediaUrlCache.has(normalizedUrl)) {
       return undefined;
     }
 
     let cancelled = false;
-    let revokeBlob = null;
-    const abortController = new AbortController();
+    let request = inflightMediaRequests.get(normalizedUrl);
+    if (!request) {
+      request = fetchBackendMediaBlobUrl(normalizedUrl)
+        .then((media) => {
+          mediaUrlCache.set(normalizedUrl, media.url);
+          inflightMediaRequests.delete(normalizedUrl);
+          return media.url;
+        })
+        .catch((err) => {
+          inflightMediaRequests.delete(normalizedUrl);
+          throw err;
+        });
+      inflightMediaRequests.set(normalizedUrl, request);
+    }
 
-    setResolvedUrl('');
-    setFailed(false);
-
-    fetchBackendMediaBlobUrl(normalizedUrl, { signal: abortController.signal })
-      .then((media) => {
-        if (cancelled) {
-          media.revoke?.();
-          return;
+    request
+      .then((url) => {
+        if (!cancelled) {
+          setMediaState({ rawUrl, url, failed: false });
         }
-        revokeBlob = media.revoke;
-        setResolvedUrl(media.url);
       })
       .catch((err) => {
         if (!cancelled && err?.name !== 'AbortError') {
-          setFailed(true);
+          setMediaState({ rawUrl, url: '', failed: true });
         }
       });
 
     return () => {
       cancelled = true;
-      abortController.abort();
-      if (revokeBlob) {
-        revokeBlob();
-      }
     };
   }, [rawUrl]);
 
-  return { src: resolvedUrl, failed };
+  const immediateUrl = getImmediateMediaUrl(rawUrl);
+  const src = immediateUrl || (mediaState.rawUrl === rawUrl ? mediaState.url : '');
+  const failed = !immediateUrl && mediaState.rawUrl === rawUrl && mediaState.failed;
+
+  return { src, failed };
 }

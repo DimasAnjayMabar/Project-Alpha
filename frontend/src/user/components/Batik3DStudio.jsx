@@ -24,8 +24,20 @@ import {
   createCottonWeaveBumpTexture,
   createStudioEnvMap,
   createTailoredTorsoGeometry,
-  createTailoredSleeveGeometry,
+  createCollarStandGeometry,
   createFoldedCollarGeometry,
+  createShirtPlacketGeometry,
+  getShirtButtonPoses,
+  createShirtPocketGeometry,
+  createBackYokeSeamGeometry,
+  createTailoredSleeveGeometry,
+  createShirtCuffGeometry,
+  createKebayaTorsoGeometry,
+  createKebayaLapelGeometry,
+  createKebayaKutubaruPanelGeometry,
+  getKebayaBroochPose,
+  createKebayaSleeveGeometry,
+  createKebayaObiGeometry,
   createPleatedClothGeometry,
   createSculptedToteGeometry,
   disposeGroupChildren,
@@ -33,6 +45,7 @@ import {
 
 const BASE_MODEL_REPEAT = {
   shirt: 1.35,
+  kebaya: 1.4,
   fabric: 1.05,
   tote: 1.25,
 };
@@ -580,117 +593,36 @@ export default function Batik3DStudio({
       roughness: 0.92,
       metalness: 0.0,
     });
-    const collarInnerMat = new THREE.MeshStandardMaterial({
-      color: '#2A1E17',
-      roughness: 0.75,
-      metalness: 0.05,
+    const shirtButtonMat = new THREE.MeshStandardMaterial({
+      color: '#2B211B',
+      roughness: 0.24,
+      metalness: 0.16,
+    });
+    const obiSilkMat = new THREE.MeshStandardMaterial({
+      color: '#4E1D13',
+      roughness: 0.44,
+      metalness: 0.12,
       side: THREE.DoubleSide,
     });
 
-    if (activeModel === 'shirt') {
-      const torsoGeo = createTailoredTorsoGeometry();
-      const torsoMesh = new THREE.Mesh(torsoGeo, batikMat);
-      torsoMesh.position.y = 0.16;
-      torsoMesh.castShadow = true;
-      torsoMesh.receiveShadow = true;
-      group.add(torsoMesh);
+    const addMannequinBase = (neckRadiusTop = 0.185, neckHeight = 0.18, neckY = 1.03) => {
+      const innerNeck = new THREE.Mesh(
+        new THREE.CylinderGeometry(neckRadiusTop, neckRadiusTop + 0.015, neckHeight, 32),
+        suedeLiningMat
+      );
+      innerNeck.position.set(0, neckY, 0.005);
+      group.add(innerNeck);
 
-      const collarStandGeo = new THREE.CylinderGeometry(0.245, 0.265, 0.14, 40, 1, true);
-      const collarStand = new THREE.Mesh(collarStandGeo, collarInnerMat);
-      collarStand.position.set(0, 1.12, 0.02);
-      collarStand.rotation.x = 0.08;
-      group.add(collarStand);
-
-      const foldedCollarGeo = createFoldedCollarGeometry();
-      const foldedCollar = new THREE.Mesh(foldedCollarGeo, batikMat);
-      foldedCollar.position.set(0, 0.16, 0);
-      foldedCollar.castShadow = true;
-      group.add(foldedCollar);
-
-      const placketCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, 1.04, 0.26),
-        new THREE.Vector3(0, 0.76, 0.415),
-        new THREE.Vector3(0, 0.45, 0.422),
-        new THREE.Vector3(0, 0.12, 0.382),
-        new THREE.Vector3(0, -0.25, 0.355),
-        new THREE.Vector3(0, -0.74, 0.372),
-      ]);
-      const placketTube = new THREE.TubeGeometry(placketCurve, 32, 0.045, 8, false);
-      placketTube.scale(1.15, 1, 0.25);
-      const placketMesh = new THREE.Mesh(placketTube, batikMat);
-      group.add(placketMesh);
-
-      const btnGeo = new THREE.SphereGeometry(0.022, 16, 12);
-      btnGeo.scale(1, 1, 0.42);
-      for (let b = 0; b < 6; b++) {
-        const t = 0.08 + b * 0.165;
-        const pt = placketCurve.getPointAt(t);
-        const btn = new THREE.Mesh(btnGeo, brassMat);
-        btn.position.set(pt.x, pt.y, pt.z + 0.012);
-        group.add(btn);
-      }
-
-      const pocketGroup = new THREE.Group();
-      const pocketShape = new THREE.Shape();
-      pocketShape.moveTo(-0.11, 0.13);
-      pocketShape.lineTo(0.11, 0.13);
-      pocketShape.lineTo(0.11, -0.09);
-      pocketShape.lineTo(0, -0.14);
-      pocketShape.lineTo(-0.11, -0.09);
-      pocketShape.closePath();
-
-      const pocketGeo = new THREE.ExtrudeGeometry(pocketShape, {
-        depth: 0.014,
-        bevelEnabled: true,
-        bevelThickness: 0.004,
-        bevelSize: 0.004,
-        bevelSegments: 2,
-      });
-      const pocketMesh = new THREE.Mesh(pocketGeo, batikMat);
-      pocketGroup.add(pocketMesh);
-
-      const pocketLip = new THREE.Mesh(new THREE.BoxGeometry(0.224, 0.026, 0.018), collarInnerMat);
-      pocketLip.position.set(0, 0.115, 0.008);
-      pocketGroup.add(pocketLip);
-
-      pocketGroup.position.set(0.27, 0.62, 0.372);
-      pocketGroup.rotation.y = 0.38;
-      pocketGroup.rotation.x = -0.05;
-      group.add(pocketGroup);
-
-      [-1, 1].forEach((side) => {
-        const sleeveGeo = createTailoredSleeveGeometry(side);
-        const sleeveMesh = new THREE.Mesh(sleeveGeo, batikMat);
-        sleeveMesh.position.y = 0.16;
-        sleeveMesh.castShadow = true;
-        sleeveMesh.receiveShadow = true;
-        group.add(sleeveMesh);
-
-        const cuffGeo = new THREE.CylinderGeometry(0.128, 0.124, 0.13, 28);
-        const cuffMesh = new THREE.Mesh(cuffGeo, collarInnerMat);
-        cuffMesh.position.set(side * 0.995, -0.32, 0.175);
-        cuffMesh.rotation.z = side * 0.14;
-        cuffMesh.rotation.x = 0.22;
-        cuffMesh.castShadow = true;
-        group.add(cuffMesh);
-
-        const cuffBtn = new THREE.Mesh(btnGeo, brassMat);
-        cuffBtn.position.set(side * 1.11, -0.32, 0.19);
-        cuffBtn.rotation.y = side * 1.4;
-        group.add(cuffBtn);
-      });
-
-      const neckFinialPoints = [
+      const neckCapPoints = [
         new THREE.Vector2(0, 0),
-        new THREE.Vector2(0.22, 0),
-        new THREE.Vector2(0.23, 0.04),
-        new THREE.Vector2(0.14, 0.09),
-        new THREE.Vector2(0.08, 0.15),
-        new THREE.Vector2(0.11, 0.19),
-        new THREE.Vector2(0, 0.22),
+        new THREE.Vector2(neckRadiusTop, 0),
+        new THREE.Vector2(neckRadiusTop * 1.02, 0.025),
+        new THREE.Vector2(neckRadiusTop * 0.62, 0.055),
+        new THREE.Vector2(neckRadiusTop * 0.42, 0.085),
+        new THREE.Vector2(0, 0.105),
       ];
-      const neckCap = new THREE.Mesh(new THREE.LatheGeometry(neckFinialPoints, 32), jatiWoodMat);
-      neckCap.position.set(0, 1.16, 0.02);
+      const neckCap = new THREE.Mesh(new THREE.LatheGeometry(neckCapPoints, 32), jatiWoodMat);
+      neckCap.position.set(0, neckY + neckHeight * 0.48, 0.005);
       group.add(neckCap);
 
       const standPole = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.044, 1.05, 24), brassMat);
@@ -709,6 +641,141 @@ export default function Batik3DStudio({
       standBase.position.y = -1.78;
       standBase.receiveShadow = true;
       group.add(standBase);
+    };
+
+    if (activeModel === 'shirt') {
+      const yOffset = 0.16;
+
+      const torsoMesh = new THREE.Mesh(createTailoredTorsoGeometry(), batikMat);
+      torsoMesh.position.y = yOffset;
+      torsoMesh.castShadow = true;
+      torsoMesh.receiveShadow = true;
+      group.add(torsoMesh);
+
+      const collarStand = new THREE.Mesh(createCollarStandGeometry(), batikMat);
+      collarStand.position.y = yOffset;
+      collarStand.castShadow = true;
+      collarStand.receiveShadow = true;
+      group.add(collarStand);
+
+      const foldedCollar = new THREE.Mesh(createFoldedCollarGeometry(), batikMat);
+      foldedCollar.position.y = yOffset;
+      foldedCollar.castShadow = true;
+      foldedCollar.receiveShadow = true;
+      group.add(foldedCollar);
+
+      const placketMesh = new THREE.Mesh(createShirtPlacketGeometry(), batikMat);
+      placketMesh.position.y = yOffset;
+      placketMesh.castShadow = true;
+      placketMesh.receiveShadow = true;
+      group.add(placketMesh);
+
+      const pocketMesh = new THREE.Mesh(createShirtPocketGeometry(), batikMat);
+      pocketMesh.position.y = yOffset;
+      pocketMesh.castShadow = true;
+      pocketMesh.receiveShadow = true;
+      group.add(pocketMesh);
+
+      const backYokeMesh = new THREE.Mesh(createBackYokeSeamGeometry(), batikMat);
+      backYokeMesh.position.y = yOffset;
+      group.add(backYokeMesh);
+
+      const upAxis = new THREE.Vector3(0, 1, 0);
+      const shirtBtnGeo = new THREE.CylinderGeometry(0.017, 0.0185, 0.006, 20);
+      getShirtButtonPoses().forEach(({ position, normal }) => {
+        const btn = new THREE.Mesh(shirtBtnGeo, shirtButtonMat);
+        btn.position.set(position.x, position.y + yOffset, position.z);
+        btn.quaternion.setFromUnitVectors(upAxis, normal);
+        group.add(btn);
+      });
+
+      [-1, 1].forEach((side) => {
+        const sleeveMesh = new THREE.Mesh(createTailoredSleeveGeometry(side), batikMat);
+        sleeveMesh.position.y = yOffset;
+        sleeveMesh.castShadow = true;
+        sleeveMesh.receiveShadow = true;
+        group.add(sleeveMesh);
+
+        const cuffData = createShirtCuffGeometry(side);
+        const cuffMesh = new THREE.Mesh(cuffData.geometry, batikMat);
+        cuffMesh.position.y = yOffset;
+        cuffMesh.castShadow = true;
+        cuffMesh.receiveShadow = true;
+        group.add(cuffMesh);
+
+        const cuffBtn = new THREE.Mesh(shirtBtnGeo, shirtButtonMat);
+        cuffBtn.position.set(
+          cuffData.buttonPosition.x,
+          cuffData.buttonPosition.y + yOffset,
+          cuffData.buttonPosition.z
+        );
+        cuffBtn.quaternion.setFromUnitVectors(upAxis, cuffData.buttonNormal);
+        group.add(cuffBtn);
+      });
+
+      addMannequinBase(0.19, 0.16, 1.08);
+    } else if (activeModel === 'kebaya') {
+      const yOffset = 0.16;
+
+      const kebayaTorso = new THREE.Mesh(createKebayaTorsoGeometry(), batikMat);
+      kebayaTorso.position.y = yOffset;
+      kebayaTorso.castShadow = true;
+      kebayaTorso.receiveShadow = true;
+      group.add(kebayaTorso);
+
+      [-1, 1].forEach((side) => {
+        const lapelMesh = new THREE.Mesh(createKebayaLapelGeometry(side), batikMat);
+        lapelMesh.position.y = yOffset;
+        lapelMesh.castShadow = true;
+        lapelMesh.receiveShadow = true;
+        group.add(lapelMesh);
+
+        const sleeveMesh = new THREE.Mesh(createKebayaSleeveGeometry(side), batikMat);
+        sleeveMesh.position.y = yOffset;
+        sleeveMesh.castShadow = true;
+        sleeveMesh.receiveShadow = true;
+        group.add(sleeveMesh);
+      });
+
+      const kutubaruPanel = new THREE.Mesh(createKebayaKutubaruPanelGeometry(), batikMat);
+      kutubaruPanel.position.y = yOffset;
+      kutubaruPanel.castShadow = true;
+      kutubaruPanel.receiveShadow = true;
+      group.add(kutubaruPanel);
+
+      const obiMesh = new THREE.Mesh(createKebayaObiGeometry(), obiSilkMat);
+      obiMesh.position.y = yOffset;
+      obiMesh.castShadow = true;
+      obiMesh.receiveShadow = true;
+      group.add(obiMesh);
+
+      // Bros Kebaya Keraton 3 susun di tengah panel Kutubaru
+      const broochPose = getKebayaBroochPose();
+      const broochGroup = new THREE.Group();
+      broochGroup.position.set(
+        broochPose.position.x,
+        broochPose.position.y + yOffset,
+        broochPose.position.z
+      );
+      broochGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), broochPose.normal);
+
+      [
+        { y: 0.036, r: 0.026 },
+        { y: -0.008, r: 0.020 },
+        { y: -0.044, r: 0.015 },
+      ].forEach(({ y, r }) => {
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0045, 10, 24), brassMat);
+        rim.position.y = y;
+        broochGroup.add(rim);
+
+        const gem = new THREE.Mesh(new THREE.SphereGeometry(r * 0.65, 16, 12), brassMat);
+        gem.scale.set(1, 1, 0.45);
+        gem.position.set(0, y, 0.002);
+        broochGroup.add(gem);
+      });
+      group.add(broochGroup);
+
+      addMannequinBase(0.16, 0.30, 0.96);
     } else if (activeModel === 'fabric') {
       const rodGeo = new THREE.CylinderGeometry(0.052, 0.052, 2.86, 28);
       rodGeo.rotateZ(Math.PI / 2);
@@ -822,7 +889,8 @@ export default function Batik3DStudio({
       brassMat.dispose();
       saddleLeatherMat.dispose();
       suedeLiningMat.dispose();
-      collarInnerMat.dispose();
+      shirtButtonMat.dispose();
+      obiSilkMat.dispose();
     };
   }, [activeModel]);
 
@@ -853,6 +921,8 @@ export default function Batik3DStudio({
   const modelName =
     activeModel === 'shirt'
       ? 'Kemeja Batik Tailored'
+      : activeModel === 'kebaya'
+      ? 'Kebaya Kutubaru Batik'
       : activeModel === 'fabric'
       ? 'Kain Panjang Gawangan'
       : 'Tas Butik & Selendang';
@@ -898,8 +968,8 @@ export default function Batik3DStudio({
             Studio Mockup 3D Batik Trenggalek
           </h2>
           <p className="text-[15px] text-[#575049] mt-2 leading-relaxed">
-            Simulasikan motif kain asli sanggar pada kemeja tailored, kain panjang wiru, atau tas
-            butik sebelum memesan lewat WhatsApp.
+            Simulasikan motif kain asli sanggar pada kemeja tailored, kebaya kutubaru, kain panjang
+            wiru, atau tas butik sebelum memesan lewat WhatsApp.
           </p>
         </FadeIn>
 
@@ -913,6 +983,7 @@ export default function Batik3DStudio({
               <div className="inline-flex flex-wrap gap-1 bg-[#EFEAE0] p-1 rounded-xl border border-[#1C1917]/12">
                 {[
                   { id: 'shirt', label: 'Kemeja Tailored' },
+                  { id: 'kebaya', label: 'Kebaya Kutubaru' },
                   { id: 'fabric', label: 'Kain Panjang' },
                   { id: 'tote', label: 'Tas & Selendang' },
                 ].map((tab) => (
