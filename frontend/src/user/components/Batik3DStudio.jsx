@@ -10,7 +10,6 @@ import {
   ArrowRight,
   Layers,
   Loader2,
-  Grid2x2,
 } from 'lucide-react';
 import FadeIn from '../../components/FadeIn';
 import ProductArtwork from './ProductArtwork';
@@ -50,19 +49,15 @@ const BASE_MODEL_REPEAT = {
   tote: 1.25,
 };
 
-function applyTextureMapping(texture, { model, scale, aspect, seamlessMirror }) {
+function applyTextureMapping(texture, { model, scale, aspect }) {
   if (!texture) return;
 
   const safeAspect = Math.max(0.35, Math.min(2.8, Number(aspect) || 1));
   const sqrtAspect = Math.sqrt(safeAspect);
   const base = (BASE_MODEL_REPEAT[model] || 1.25) * (Number(scale) || 1.0);
 
-  const wrapMode = seamlessMirror
-    ? THREE.MirroredRepeatWrapping
-    : THREE.RepeatWrapping;
-
-  texture.wrapS = wrapMode;
-  texture.wrapT = wrapMode;
+  texture.wrapS = THREE.MirroredRepeatWrapping;
+  texture.wrapT = THREE.MirroredRepeatWrapping;
   texture.repeat.set(base / sqrtAspect, base * sqrtAspect);
   texture.needsUpdate = true;
 }
@@ -107,7 +102,6 @@ export default function Batik3DStudio({
 }) {
   const [zoom, setZoom] = useState(1.0);
   const [textureScale, setTextureScale] = useState(1.0);
-  const [seamlessMirror, setSeamlessMirror] = useState(true);
   const [textureSource, setTextureSource] = useState('canvas'); // 'loading' | 'mockup' | 'display' | 'canvas'
   const [autoRotate, setAutoRotate] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -156,16 +150,14 @@ export default function Batik3DStudio({
   const mappingConfigRef = useRef({
     model: activeModel,
     scale: textureScale,
-    seamlessMirror,
   });
 
   useEffect(() => {
     mappingConfigRef.current = {
       model: activeModel,
       scale: textureScale,
-      seamlessMirror,
     };
-  }, [activeModel, textureScale, seamlessMirror]);
+  }, [activeModel, textureScale]);
 
   const swapMaterialTexture = useCallback((nextTexture, aspectRatio = 1.0) => {
     const state = sceneStateRef.current;
@@ -544,7 +536,7 @@ export default function Batik3DStudio({
     };
   }, [activeProduct, swapMaterialTexture]);
 
-  // Perbarui skala repeat & pola sambungan tekstur secara instan tanpa memuat ulang gambar
+  // Perbarui skala repeat tekstur secara instan tanpa memuat ulang gambar
   useEffect(() => {
     const state = sceneStateRef.current;
     if (!state.batikMaterial?.map) return;
@@ -553,14 +545,13 @@ export default function Batik3DStudio({
       model: activeModel,
       scale: textureScale,
       aspect: state.textureAspect,
-      seamlessMirror,
     });
     state.batikMaterial.needsUpdate = true;
 
     if (state.renderer && state.scene && state.camera) {
       state.renderer.render(state.scene, state.camera);
     }
-  }, [activeModel, textureScale, seamlessMirror]);
+  }, [activeModel, textureScale]);
 
   // Bangun geometri 3D sesuai model pilihan
   useEffect(() => {
@@ -920,12 +911,12 @@ export default function Batik3DStudio({
   const effectiveWa = getEffectiveWa(activeProduct.shop.id, activeProduct.shop.number);
   const modelName =
     activeModel === 'shirt'
-      ? 'Kemeja Batik Tailored'
+      ? 'Kemeja Batik'
       : activeModel === 'kebaya'
-      ? 'Kebaya Kutubaru Batik'
+      ? 'Kebaya Batik'
       : activeModel === 'fabric'
-      ? 'Kain Panjang Gawangan'
-      : 'Tas Butik & Selendang';
+      ? 'Kain Panjang'
+      : 'Tas & Selendang';
   const waHref = effectiveWa
     ? buildProductOrderWaUrl(
         activeProduct.shop,
@@ -968,8 +959,8 @@ export default function Batik3DStudio({
             Studio Mockup 3D Batik Trenggalek
           </h2>
           <p className="text-[15px] text-[#575049] mt-2 leading-relaxed">
-            Simulasikan motif kain asli sanggar pada kemeja tailored, kebaya kutubaru, kain panjang
-            wiru, atau tas butik sebelum memesan lewat WhatsApp.
+            Simulasikan motif kain asli sanggar pada kemeja, kebaya, kain panjang, atau tas &amp;
+            selendang sebelum memesan lewat WhatsApp.
           </p>
         </FadeIn>
 
@@ -977,24 +968,24 @@ export default function Batik3DStudio({
           <FadeIn
             variant="scale"
             delay={100}
-            className="lg:col-span-7 bg-[#FCFBF8] rounded-xl border border-[#1C1917]/12 p-4 sm:p-5 flex flex-col justify-between gap-4"
+            className="lg:col-span-7 bg-[#FCFBF8] rounded-xl border border-[#1C1917]/12 p-4 sm:p-5 flex flex-col gap-3.5"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex flex-wrap gap-1 bg-[#EFEAE0] p-1 rounded-xl border border-[#1C1917]/12">
+            <div className="flex flex-col items-center gap-2.5">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 {[
-                  { id: 'shirt', label: 'Kemeja Tailored' },
-                  { id: 'kebaya', label: 'Kebaya Kutubaru' },
                   { id: 'fabric', label: 'Kain Panjang' },
+                  { id: 'shirt', label: 'Kemeja' },
+                  { id: 'kebaya', label: 'Kebaya' },
                   { id: 'tote', label: 'Tas & Selendang' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => onSelectModel(tab.id)}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium transition-colors cursor-pointer ${
+                    className={`min-h-[40px] px-4 py-2 rounded-[10px] text-[13.5px] font-medium border transition-all duration-150 active:scale-[0.98] cursor-pointer ${
                       activeModel === tab.id
-                        ? 'bg-[#7C3219] text-white'
-                        : 'text-[#575049] hover:text-[#1C1917]'
+                        ? 'bg-[#7C3219] text-white border-[#7C3219] shadow-xs'
+                        : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:border-[#7C3219]/40 hover:text-[#1C1917] hover:bg-[#EFEAE0]/70'
                     }`}
                   >
                     {tab.label}
@@ -1002,13 +993,13 @@ export default function Batik3DStudio({
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() =>
                     setLightMode((m) => (m === 'warm' ? 'day' : m === 'day' ? 'boutique' : 'warm'))
                   }
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#1C1917] text-[13px] font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-[9px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#1C1917] text-[12.5px] font-medium transition-all duration-150 active:scale-[0.98] cursor-pointer"
                 >
                   <Sun className="w-3.5 h-3.5 text-[#7C3219]" />
                   <span>
@@ -1021,24 +1012,11 @@ export default function Batik3DStudio({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSeamlessMirror((v) => !v)}
-                  title="Ubah mode pengulangan sambungan motif pada kain 3D"
-                  className={`inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] border text-[13px] font-medium cursor-pointer transition-colors ${
-                    seamlessMirror
-                      ? 'bg-[#F3E9E2] text-[#7C3219] border-[#7C3219]/40'
-                      : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
-                  }`}
-                >
-                  <Grid2x2 className="w-3.5 h-3.5" />
-                  <span>{seamlessMirror ? 'Sambungan Halus' : 'Ulang Standar'}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setAutoRotate((v) => !v)}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-[10px] border text-[13px] font-medium cursor-pointer transition-colors ${
+                  className={`min-h-[36px] px-3 py-1.5 rounded-[9px] border text-[12.5px] font-medium cursor-pointer transition-all duration-150 active:scale-[0.98] ${
                     autoRotate
                       ? 'bg-[#1B1714] text-[#F5F1E8] border-[#1B1714]'
-                      : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917]'
+                      : 'bg-[#F7F4EE] text-[#575049] border-[#1C1917]/15 hover:text-[#1C1917] hover:bg-[#EFEAE0]'
                   }`}
                 >
                   Auto-Putar: {autoRotate ? 'Aktif' : 'Jeda'}
@@ -1051,7 +1029,7 @@ export default function Batik3DStudio({
                     setZoom(1.0);
                     setTextureScale(1.0);
                   }}
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#575049] hover:text-[#1C1917] text-[13px] font-medium cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-[9px] bg-[#F7F4EE] hover:bg-[#EFEAE0] border border-[#1C1917]/15 text-[#575049] hover:text-[#1C1917] text-[12.5px] font-medium transition-all duration-150 active:scale-[0.98] cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Reset</span>
@@ -1065,7 +1043,7 @@ export default function Batik3DStudio({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerUp}
-              className={`relative rounded-xl overflow-hidden border border-[#1C1917]/12 h-[380px] sm:h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
+              className={`relative flex-1 rounded-xl overflow-hidden border border-[#1C1917]/12 min-h-[380px] sm:min-h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
                 lightMode === 'warm'
                   ? 'bg-gradient-to-b from-[#EDE5D7] via-[#E3D9C7] to-[#D4C6B1]'
                   : lightMode === 'day'
