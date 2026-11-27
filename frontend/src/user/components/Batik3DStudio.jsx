@@ -135,6 +135,9 @@ export default function Batik3DStudio({
     dragging: false,
     prevX: 0,
     prevY: 0,
+    activePointers: new Map(),
+    pinchStartDist: 0,
+    pinchStartZoom: 1.0,
   });
 
   const activeProduct = useMemo(() => {
@@ -203,8 +206,17 @@ export default function Batik3DStudio({
       e.preventDefault();
       setZoom((prev) => Math.max(0.75, Math.min(1.5, prev - e.deltaY * 0.0008)));
     };
+    const onTouchMoveNative = (e) => {
+      if (e.touches && e.touches.length >= 2) {
+        e.preventDefault();
+      }
+    };
     el.addEventListener('wheel', onWheelNative, { passive: false });
-    return () => el.removeEventListener('wheel', onWheelNative);
+    el.addEventListener('touchmove', onTouchMoveNative, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheelNative);
+      el.removeEventListener('touchmove', onTouchMoveNative);
+    };
   }, []);
 
   // Inisialisasi WebGLRenderer, Scene, Lighting & Render Loop
@@ -888,13 +900,42 @@ export default function Batik3DStudio({
   if (!enrichedProducts || enrichedProducts.length === 0 || !activeProduct) return null;
 
   const handlePointerDown = (e) => {
-    sceneStateRef.current.dragging = true;
-    sceneStateRef.current.prevX = e.clientX;
-    sceneStateRef.current.prevY = e.clientY;
+    const state = sceneStateRef.current;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    state.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (state.activePointers.size === 1) {
+      state.dragging = true;
+      state.prevX = e.clientX;
+      state.prevY = e.clientY;
+    } else if (state.activePointers.size === 2) {
+      state.dragging = false;
+      const [p1, p2] = Array.from(state.activePointers.values());
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      state.pinchStartDist = Math.max(dist, 1);
+      state.pinchStartZoom = state.targetZoom;
+    }
   };
 
   const handlePointerMove = (e) => {
     const state = sceneStateRef.current;
+    if (!state.activePointers.has(e.pointerId)) return;
+    state.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (state.activePointers.size >= 2) {
+      if (state.pinchStartDist > 0) {
+        const [p1, p2] = Array.from(state.activePointers.values());
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        const nextZoom = Math.max(
+          0.75,
+          Math.min(1.5, state.pinchStartZoom * (dist / state.pinchStartDist))
+        );
+        state.targetZoom = nextZoom;
+        setZoom(Math.round(nextZoom * 100) / 100);
+      }
+      return;
+    }
+
     if (!state.dragging) return;
     const dx = e.clientX - state.prevX;
     const dy = e.clientY - state.prevY;
@@ -904,8 +945,24 @@ export default function Batik3DStudio({
     state.targetRotX = Math.max(-0.55, Math.min(0.55, state.targetRotX + dy * 0.008));
   };
 
-  const handlePointerUp = () => {
-    sceneStateRef.current.dragging = false;
+  const handlePointerUp = (e) => {
+    const state = sceneStateRef.current;
+    if (e.currentTarget?.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    state.activePointers.delete(e.pointerId);
+
+    if (state.activePointers.size < 2) {
+      state.pinchStartDist = 0;
+    }
+    if (state.activePointers.size === 1) {
+      const [remaining] = state.activePointers.values();
+      state.prevX = remaining.x;
+      state.prevY = remaining.y;
+      state.dragging = true;
+    } else if (state.activePointers.size === 0) {
+      state.dragging = false;
+    }
   };
 
   const effectiveWa = getEffectiveWa(activeProduct.shop.id, activeProduct.shop.number);
@@ -1042,7 +1099,8 @@ export default function Batik3DStudio({
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onLostPointerCapture={handlePointerUp}
               className={`relative flex-1 rounded-xl overflow-hidden border border-[#1C1917]/12 min-h-[380px] sm:min-h-[440px] select-none touch-none cursor-grab active:cursor-grabbing ${
                 lightMode === 'warm'
                   ? 'bg-gradient-to-b from-[#EDE5D7] via-[#E3D9C7] to-[#D4C6B1]'
@@ -1115,7 +1173,7 @@ export default function Batik3DStudio({
               </div>
 
               <p className="text-[13px] text-[#575049] text-center">
-                Seret untuk memutar 360° · Gulir untuk zoom · Geser skala untuk mengatur ukuran motif
+                Seret untuk memutar 360° · Cubit atau gulir untuk zoom · Geser skala untuk ukuran motif
               </p>
             </div>
           </FadeIn>

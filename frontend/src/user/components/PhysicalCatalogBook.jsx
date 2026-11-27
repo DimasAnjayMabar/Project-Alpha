@@ -2399,14 +2399,16 @@ export default function PhysicalCatalogBookSection({
               )}
             </div>
           ) : (
-            <div
-              ref={bookContainerRef}
-              onPointerDown={handleBookPointerDown}
-              onPointerMove={handleBookPointerMove}
-              onPointerUp={handleBookPointerUp}
-              onPointerCancel={handleBookPointerUp}
-              className="relative mx-auto select-none"
-            >
+            <div className="lg:px-[68px]">
+              <div className="relative">
+                <div
+                  ref={bookContainerRef}
+                  onPointerDown={handleBookPointerDown}
+                  onPointerMove={handleBookPointerMove}
+                  onPointerUp={handleBookPointerUp}
+                  onPointerCancel={handleBookPointerUp}
+                  className="relative mx-auto select-none"
+                >
               {isFrontCoverTransition ? (
                 <div
                   style={{
@@ -2732,6 +2734,39 @@ export default function PhysicalCatalogBookSection({
                   </div>
                 </div>
               )}
+              </div>
+
+              {/* Tombol panah melayang di kiri & kanan buku Desktop */}
+              {!flipState && canGoPrev && (
+                <button
+                  type="button"
+                  onClick={() => triggerFlip(safePage - 1)}
+                  aria-label="Halaman sebelumnya"
+                  className={`hidden lg:flex w-11 h-11 rounded-full bg-[#FCFBF8]/95 hover:bg-white border border-[#1C1917]/18 shadow-[0_8px_22px_rgba(24,18,14,0.18)] text-[#7C3219] hover:scale-105 active:scale-95 transition-all duration-300 items-center justify-center absolute top-1/2 -translate-y-1/2 z-40 cursor-pointer ${
+                    safePage === 0 || safePage === backCoverPage
+                      ? 'left-[calc(25%-52px)]'
+                      : '-left-[62px]'
+                  }`}
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              )}
+
+              {!flipState && canGoNext && (
+                <button
+                  type="button"
+                  onClick={() => triggerFlip(safePage + 1)}
+                  aria-label="Halaman berikutnya"
+                  className={`hidden lg:flex w-11 h-11 rounded-full bg-[#FCFBF8]/95 hover:bg-white border border-[#1C1917]/18 shadow-[0_8px_22px_rgba(24,18,14,0.18)] text-[#7C3219] hover:scale-105 active:scale-95 transition-all duration-300 items-center justify-center absolute top-1/2 -translate-y-1/2 z-40 cursor-pointer ${
+                    safePage === 0 || safePage === backCoverPage
+                      ? 'right-[calc(25%-52px)]'
+                      : '-right-[62px]'
+                  }`}
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              )}
+              </div>
             </div>
           )}
 
@@ -2762,33 +2797,29 @@ export default function PhysicalCatalogBookSection({
               </div>
             </div>
           ) : (
-            <div className="mt-4 hidden lg:flex items-center justify-between gap-2">
-              <button
-                type="button"
-                disabled={!canGoPrev || Boolean(flipState)}
-                onClick={() => triggerFlip(safePage - 1)}
-                className="taste-btn-secondary min-h-[44px] px-3.5 text-[13px]"
-              >
-                <ChevronLeft className="w-4 h-4 shrink-0" />
-                <span>Sebelumnya</span>
-              </button>
-
-              <span className="text-[13px] text-[#575049] text-center">
-                Klik atau seret sudut buku untuk membalik ·{' '}
+            <div className="mt-4 hidden lg:flex flex-col items-center gap-2 text-center">
+              <span className="text-[13px] text-[#575049]">
+                Klik panah atau seret sudut buku untuk membalik ·{' '}
                 <strong className="font-medium text-[#1C1917] tabular-nums">
                   Lembar {safePage + 1} dari {totalBookPages}
                 </strong>
               </span>
-
-              <button
-                type="button"
-                disabled={!canGoNext || Boolean(flipState)}
-                onClick={() => triggerFlip(safePage + 1)}
-                className="taste-btn-secondary min-h-[44px] px-3.5 text-[13px]"
-              >
-                <span>Berikutnya</span>
-                <ChevronRight className="w-4 h-4 shrink-0" />
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {Array.from({ length: totalBookPages }, (_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    disabled={Boolean(flipState)}
+                    onClick={() => triggerFlip(idx)}
+                    aria-label={getPageTitle(idx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      idx === safePage
+                        ? 'w-5 bg-[#7C3219]'
+                        : 'w-2 bg-[#1C1917]/20 hover:bg-[#7C3219]/50'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </FadeIn>
