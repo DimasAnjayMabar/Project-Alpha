@@ -8,8 +8,6 @@ import {
   ZoomIn,
   ZoomOut,
   ArrowRight,
-  Layers,
-  Loader2,
 } from 'lucide-react';
 import FadeIn from '../../components/FadeIn';
 import ProductArtwork from './ProductArtwork';
@@ -102,7 +100,6 @@ export default function Batik3DStudio({
 }) {
   const [zoom, setZoom] = useState(1.0);
   const [textureScale, setTextureScale] = useState(1.0);
-  const [textureSource, setTextureSource] = useState('canvas'); // 'loading' | 'mockup' | 'display' | 'canvas'
   const [autoRotate, setAutoRotate] = useState(() => {
     if (typeof window === 'undefined') return true;
     return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -479,25 +476,23 @@ export default function Batik3DStudio({
     const displayUrl = resolveProductDisplayUrl(activeProduct);
 
     const candidates = [];
-    if (mockupUrl) candidates.push({ url: mockupUrl, source: 'mockup' });
+    if (mockupUrl) candidates.push(mockupUrl);
     if (displayUrl && displayUrl !== mockupUrl) {
-      candidates.push({ url: displayUrl, source: 'display' });
+      candidates.push(displayUrl);
     }
 
     if (candidates.length === 0) {
-      setTextureSource('canvas');
       return () => {
         cancelled = true;
         abortController.abort();
       };
     }
 
-    setTextureSource('loading');
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
 
     const loadCandidates = async () => {
-      for (const { url, source } of candidates) {
+      for (const url of candidates) {
         if (cancelled) return;
         let revoke = null;
         try {
@@ -526,17 +521,12 @@ export default function Batik3DStudio({
           swapMaterialTexture(loadedTex, aspect);
           revoke();
           revoke = null;
-          setTextureSource(source);
           return;
         } catch (err) {
           if (revoke) revoke();
           if (cancelled || err?.name === 'AbortError') return;
           // Jika kandidat ini gagal dimuat (404/network/decode), coba kandidat berikutnya
         }
-      }
-
-      if (!cancelled) {
-        setTextureSource('canvas');
       }
     };
 
@@ -810,10 +800,6 @@ export default function Batik3DStudio({
       clothMesh.receiveShadow = true;
       group.add(clothMesh);
       state.clothGeo = clothGeo;
-
-      const hemTrim = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.035, 0.02), brassMat);
-      hemTrim.position.set(0, -1.34, 0);
-      group.add(hemTrim);
     } else {
       const bagGroup = new THREE.Group();
       bagGroup.position.set(-0.4, -0.26, 0.08);
@@ -983,15 +969,6 @@ export default function Batik3DStudio({
       )
     : '';
 
-  const textureBadgeLabel =
-    textureSource === 'loading'
-      ? 'Memuat tekstur kain...'
-      : textureSource === 'mockup'
-      ? 'Tekstur Mockup 3D Asli'
-      : textureSource === 'display'
-      ? 'Tekstur Foto Produk'
-      : 'Simulasi Motif Kanvas';
-
   return (
     <section
       ref={sectionRef}
@@ -1109,16 +1086,6 @@ export default function Batik3DStudio({
                   : 'bg-[#1F1814]'
               }`}
             >
-              {/* Indikator Sumber Tekstur 3D */}
-              <div className="pointer-events-none absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1B1714]/80 text-[#F5F1E8] text-[12px] font-medium backdrop-blur-xs border border-white/10">
-                {textureSource === 'loading' ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4A46B]" />
-                ) : (
-                  <Layers className="w-3.5 h-3.5 text-[#C4A46B]" />
-                )}
-                <span>{textureBadgeLabel}</span>
-              </div>
-
               <div ref={mountRef} className="w-full h-full" />
             </div>
 
