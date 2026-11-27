@@ -973,7 +973,7 @@ export default function Batik3DStudio({
     <section
       ref={sectionRef}
       id="mockup-3d"
-      className="relative overflow-hidden py-16 lg:py-24 bg-[#EFEAE0] border-t border-[#1C1917]/12"
+      className="relative overflow-hidden py-10 lg:py-12 bg-[#EFEAE0] border-t border-[#1C1917]/12"
     >
       <img
         src="/ornaments/mega-mendung-maroon.png"
@@ -988,7 +988,7 @@ export default function Batik3DStudio({
         className="hidden lg:block pointer-events-none select-none absolute -bottom-10 -left-10 w-64 lg:w-80 opacity-[0.11]"
       />
       <div className="taste-wrap relative z-10">
-        <FadeIn className="max-w-3xl mb-8">
+        <FadeIn className="max-w-3xl mb-6">
           <h2 className="font-serif font-normal text-[clamp(1.85rem,3vw,2.65rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
             Studio Mockup 3D Batik Trenggalek
           </h2>
@@ -1248,7 +1248,7 @@ export default function Batik3DStudio({
                     onClick={() => onOpenBookProduct(activeProduct.shop.id, activeProduct.id)}
                     className="taste-link shrink-0 text-[13px] font-medium text-[#7C3219] min-h-[38px] cursor-pointer"
                   >
-                    <span>Buka di Buku</span>
+                    <span>Lihat Detail</span>
                     <ArrowRight className="w-3.5 h-3.5 m-arrow" />
                   </button>
                 </div>

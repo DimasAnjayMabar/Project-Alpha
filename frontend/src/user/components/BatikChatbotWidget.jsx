@@ -328,7 +328,7 @@ export default function BatikChatbotWidget({
                                 className="min-h-[38px] px-2 rounded-[10px] bg-[#F7F4EE] hover:bg-[#EFEAE0] disabled:opacity-45 border border-[#1C1917]/15 text-[13px] font-medium text-[#1C1917] flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed"
                               >
                                 <BookOpen className="w-3.5 h-3.5 text-[#7C3219]" />
-                                <span>Buku</span>
+                                <span>Detail</span>
                               </button>
                               <button
                                 type="button"

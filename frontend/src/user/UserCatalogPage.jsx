@@ -776,7 +776,7 @@ export default function UserCatalogPage({
         {/* 4. ETALASE KATALOG TERKELOMPOK PER SANGGAR */}
         <section
           id="katalog"
-          className="relative overflow-hidden bg-[#F7F4EE] border-t border-[#1C1917]/12 py-16 lg:py-24"
+          className="relative overflow-hidden bg-[#F7F4EE] border-t border-[#1C1917]/12 py-10 lg:py-12"
         >
           <img
             src="/ornaments/mega-mendung-maroon.png"
@@ -1143,7 +1143,8 @@ export default function UserCatalogPage({
                                           onClick={() => handleOpenBookProduct(prod.shop.id, prod.id)}
                                           className="taste-btn-secondary w-full"
                                         >
-                                          <span>Buka di Buku</span>
+                                          <BookOpen className="w-3.5 h-3.5 text-[#7C3219] shrink-0" />
+                                          <span>Lihat Detail</span>
                                         </button>
                                       </div>
                                     </div>
