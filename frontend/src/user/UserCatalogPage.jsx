@@ -1257,7 +1257,7 @@ export default function UserCatalogPage({
           </div>
 
           <div className="pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[13px] text-[#B5ACA2]">
-            <span>© 2026 Batik Wicara — Kabupaten Trenggalek, Jawa Timur</span>
+            <span>© 2026 Batik Wicara Kabupaten Trenggalek, Jawa Timur</span>
             <span>Pemesanan terhubung langsung ke WhatsApp masing-masing sanggar</span>
           </div>
         </FadeIn>
