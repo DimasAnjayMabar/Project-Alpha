@@ -11,11 +11,14 @@ function ProductArtwork({ product, imageUrl, size = 320, className = '' }) {
   const [loadedSrc, setLoadedSrc] = useState('');
   const [imgErrorSrc, setImgErrorSrc] = useState('');
 
+  const showImg = Boolean(resolvedSrc) && !failed && imgErrorSrc !== resolvedSrc;
+  const alreadyDecoded = Boolean(resolvedSrc) && decodedImageUrls.has(resolvedSrc);
+  const isLoaded = showImg && (alreadyDecoded || loadedSrc === resolvedSrc);
+
   useEffect(() => {
-    if (canvasRef.current && product) {
-      drawProductMotifToCanvas(canvasRef.current, product, size);
-    }
-  }, [product, size]);
+    if (isLoaded || !canvasRef.current || !product) return;
+    drawProductMotifToCanvas(canvasRef.current, product, Math.min(size, 220));
+  }, [isLoaded, product, size]);
 
   useEffect(() => {
     const el = imgRef.current;
@@ -28,18 +31,15 @@ function ProductArtwork({ product, imageUrl, size = 320, className = '' }) {
     return undefined;
   }, [resolvedSrc]);
 
-  const showImg = Boolean(resolvedSrc) && !failed && imgErrorSrc !== resolvedSrc;
-  const alreadyDecoded = Boolean(resolvedSrc) && decodedImageUrls.has(resolvedSrc);
-  const isLoaded = showImg && (alreadyDecoded || loadedSrc === resolvedSrc);
-
   return (
     <div className={`relative overflow-hidden ${className}`}>
-      <canvas ref={canvasRef} className="w-full h-full object-cover block" />
+      {!isLoaded && <canvas ref={canvasRef} className="w-full h-full object-cover block" />}
       {showImg && (
         <img
           ref={imgRef}
           src={resolvedSrc}
           alt={product?.name || 'Produk Batik'}
+          decoding="async"
           onLoad={() => {
             if (resolvedSrc) decodedImageUrls.add(resolvedSrc);
             setLoadedSrc(resolvedSrc);

@@ -303,6 +303,9 @@ export default function PhysicalCatalogBookSection({
     pointerId: null,
     startX: 0,
     startY: 0,
+    lastX: 0,
+    lastTime: 0,
+    velocityX: 0,
     direction: null,
     hasMoved: false,
     flip: null,
@@ -312,10 +315,15 @@ export default function PhysicalCatalogBookSection({
     pointerId: null,
     startX: 0,
     startY: 0,
+    lastX: 0,
+    lastTime: 0,
+    velocityX: 0,
     direction: null,
     hasMoved: false,
     flip: null,
   });
+  const flipDomRef = useRef({});
+  const flipProgressRef = useRef(0);
   const animFrameRef = useRef(null);
 
   useEffect(() => {
@@ -374,13 +382,151 @@ export default function PhysicalCatalogBookSection({
   const account = activeBook?.account || null;
   const products = useMemo(() => activeBook?.products || [], [activeBook]);
 
+  const applyFlipDomProgress = useCallback(
+    (session, progress) => {
+      if (!session) return;
+      const dom = flipDomRef.current;
+      const p = progress;
+
+      if (isMobile) {
+        const isNext = session.direction === 'next';
+        const angle = isNext ? -p * 90 : -(1 - p) * 90;
+        const opacity = isNext
+          ? p > 0.92
+            ? Math.max(0, 1 - (p - 0.92) / 0.08)
+            : 1
+          : p < 0.08
+            ? Math.max(0, p / 0.08)
+            : 1;
+        const arch = Math.sin(Math.min(1, Math.max(0, Math.abs(angle) / 90)) * Math.PI);
+
+        if (dom.mobileShadow) {
+          dom.mobileShadow.style.opacity = String(isNext ? (1 - p) * 0.42 : p * 0.42);
+        }
+        if (dom.mobileLeaf) {
+          dom.mobileLeaf.style.transform = `rotateY(${angle}deg)`;
+        }
+        if (dom.mobileLeafFace) {
+          dom.mobileLeafFace.style.opacity = String(opacity);
+        }
+        if (dom.mobileLeafSheen) {
+          dom.mobileLeafSheen.style.opacity = String(0.2 + arch * 0.65);
+        }
+        return;
+      }
+
+      const isFront =
+        (session.fromPage === 0 && session.toPage >= 1 && session.toPage < backCoverPage) ||
+        (session.toPage === 0 && session.fromPage >= 1 && session.fromPage < backCoverPage);
+      if (isFront) {
+        const openAmt = session.fromPage === 0 ? p : 1 - p;
+        const arch = Math.sin(openAmt * Math.PI);
+        if (dom.frontShift) {
+          dom.frontShift.style.transform = `translateX(${-(1 - openAmt) * 25}%)`;
+        }
+        if (dom.frontShadow) {
+          dom.frontShadow.style.opacity = String(Math.max(0, (1 - openAmt) * 0.55));
+        }
+        if (dom.frontLeaf) {
+          dom.frontLeaf.style.transform = `rotateY(${-openAmt * 180}deg)`;
+        }
+        if (dom.frontLeafFront) {
+          dom.frontLeafFront.style.visibility = openAmt >= 0.5 ? 'hidden' : 'visible';
+        }
+        if (dom.frontLeafFrontSheen) {
+          dom.frontLeafFrontSheen.style.opacity = String(arch * 0.65);
+        }
+        if (dom.frontLeafBack) {
+          dom.frontLeafBack.style.visibility = openAmt < 0.5 ? 'hidden' : 'visible';
+        }
+        if (dom.frontLeafBackSheen) {
+          dom.frontLeafBackSheen.style.opacity = String(arch * 0.6);
+        }
+        return;
+      }
+
+      const isBack =
+        (session.toPage === backCoverPage &&
+          session.fromPage >= 1 &&
+          session.fromPage < backCoverPage) ||
+        (session.fromPage === backCoverPage &&
+          session.toPage >= 1 &&
+          session.toPage < backCoverPage);
+      if (isBack) {
+        const closedAmt = session.toPage === backCoverPage ? p : 1 - p;
+        const arch = Math.sin(closedAmt * Math.PI);
+        if (dom.backShift) {
+          dom.backShift.style.transform = `translateX(${closedAmt * 25}%)`;
+        }
+        if (dom.backShadow) {
+          dom.backShadow.style.opacity = String(Math.max(0, closedAmt * 0.55));
+        }
+        if (dom.backLeaf) {
+          dom.backLeaf.style.transform = `rotateY(${(1 - closedAmt) * 180}deg)`;
+        }
+        if (dom.backLeafFront) {
+          dom.backLeafFront.style.visibility = closedAmt <= 0.5 ? 'hidden' : 'visible';
+        }
+        if (dom.backLeafFrontSheen) {
+          dom.backLeafFrontSheen.style.opacity = String(arch * 0.65);
+        }
+        if (dom.backLeafBack) {
+          dom.backLeafBack.style.visibility = closedAmt > 0.5 ? 'hidden' : 'visible';
+        }
+        if (dom.backLeafBackSheen) {
+          dom.backLeafBackSheen.style.opacity = String(arch * 0.6);
+        }
+        return;
+      }
+
+      const isNext = session.direction === 'next';
+      const arch = Math.sin(p * Math.PI);
+      if (dom.spreadLeftShadow) {
+        dom.spreadLeftShadow.style.opacity = String(
+          isNext ? Math.max(0, (p - 0.35) * 1.1) : Math.max(0, (0.65 - p) * 1.1)
+        );
+      }
+      if (dom.spreadRightShadow) {
+        dom.spreadRightShadow.style.opacity = String(
+          isNext ? Math.max(0, (0.65 - p) * 1.1) : Math.max(0, (p - 0.35) * 1.1)
+        );
+      }
+      if (dom.spreadLeaf) {
+        dom.spreadLeaf.style.transform = `rotateY(${isNext ? -p * 180 : p * 180}deg)`;
+      }
+      if (dom.spreadLeafFront) {
+        dom.spreadLeafFront.style.visibility = p >= 0.5 ? 'hidden' : 'visible';
+      }
+      if (dom.spreadLeafFrontSheen) {
+        dom.spreadLeafFrontSheen.style.opacity = String(0.25 + arch * 0.75);
+      }
+      if (dom.spreadLeafBack) {
+        dom.spreadLeafBack.style.visibility = p < 0.5 ? 'hidden' : 'visible';
+      }
+      if (dom.spreadLeafBackSheen) {
+        dom.spreadLeafBackSheen.style.opacity = String(0.25 + arch * 0.75);
+      }
+    },
+    [isMobile, backCoverPage]
+  );
+
   const animatePaperFlip = useCallback(
     (direction, fromPage, toPage, startProgress = 0, completeTurn = true) => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       setCornerHover(null);
 
+      const session = {
+        direction,
+        fromPage,
+        toPage,
+        initialProgress: startProgress,
+        isDragging: false,
+      };
+      flipProgressRef.current = startProgress;
+      setFlipState(session);
+
       const targetProgress = completeTurn ? 1 : 0;
-      const duration = Math.max(260, Math.abs(targetProgress - startProgress) * 580);
+      const duration = Math.max(220, Math.abs(targetProgress - startProgress) * 500);
       const startTime = performance.now();
 
       const step = (now) => {
@@ -389,15 +535,10 @@ export default function PhysicalCatalogBookSection({
         const eased =
           rawT < 0.5 ? 4 * rawT * rawT * rawT : 1 - Math.pow(-2 * rawT + 2, 3) / 2;
         const currentProgress = startProgress + (targetProgress - startProgress) * eased;
+        flipProgressRef.current = currentProgress;
 
         if (rawT < 1) {
-          setFlipState({
-            direction,
-            fromPage,
-            toPage,
-            progress: currentProgress,
-            isDragging: false,
-          });
+          applyFlipDomProgress(session, currentProgress);
           animFrameRef.current = requestAnimationFrame(step);
         } else {
           animFrameRef.current = null;
@@ -410,7 +551,7 @@ export default function PhysicalCatalogBookSection({
 
       animFrameRef.current = requestAnimationFrame(step);
     },
-    [onChangeBookPage]
+    [applyFlipDomProgress, onChangeBookPage]
   );
 
   const triggerFlip = useCallback(
@@ -483,34 +624,22 @@ export default function PhysicalCatalogBookSection({
       )
     : '';
 
-  // Drag handler Desktop
+  // Drag handler Desktop & Tablet (swipe bebas di seluruh permukaan buku tanpa re-render per frame)
   const handleBookPointerDown = (e) => {
     if (isMobile || flipState || dragStartRef.current.active) return;
     suppressNextClickRef.current = false;
     if (e.target.closest('button, a, input, select')) return;
 
-    const rect = bookContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const relX = (e.clientX - rect.left) / rect.width;
-    let direction = null;
-    if (safePage === 0 && relX > 0.3) {
-      direction = 'next';
-    } else if (safePage === backCoverPage && relX < 0.7) {
-      direction = 'prev';
-    } else if (relX > 0.62 && safePage < backCoverPage) {
-      direction = 'next';
-    } else if (relX < 0.38 && safePage > 0) {
-      direction = 'prev';
-    }
-
-    if (!direction) return;
+    const now = performance.now();
     dragStartRef.current = {
       active: true,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      direction,
+      lastX: e.clientX,
+      lastTime: now,
+      velocityX: 0,
+      direction: null,
       hasMoved: false,
       flip: null,
     };
@@ -522,15 +651,22 @@ export default function PhysicalCatalogBookSection({
 
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
-    if (!drag.hasMoved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-    if (!drag.hasMoved && Math.abs(dy) > Math.abs(dx) * 1.35) {
-      drag.active = false;
-      drag.pointerId = null;
-      drag.flip = null;
-      return;
-    }
-
     if (!drag.hasMoved) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (Math.abs(dy) > Math.abs(dx) * 1.25) {
+        drag.active = false;
+        drag.pointerId = null;
+        drag.flip = null;
+        return;
+      }
+      const dir = dx < 0 ? 'next' : 'prev';
+      if ((dir === 'next' && safePage >= backCoverPage) || (dir === 'prev' && safePage <= 0)) {
+        drag.active = false;
+        drag.pointerId = null;
+        drag.flip = null;
+        return;
+      }
+      drag.direction = dir;
       drag.hasMoved = true;
       try {
         e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -538,22 +674,37 @@ export default function PhysicalCatalogBookSection({
         // abaikan jika pointer capture tidak didukung
       }
     }
+
+    const now = performance.now();
+    const dt = now - drag.lastTime;
+    if (dt > 0) {
+      const instV = (e.clientX - drag.lastX) / dt;
+      drag.velocityX = drag.velocityX * 0.4 + instV * 0.6;
+      drag.lastX = e.clientX;
+      drag.lastTime = now;
+    }
+
     const rect = bookContainerRef.current?.getBoundingClientRect();
-    const halfWidth = rect ? Math.max(220, rect.width * 0.45) : 340;
+    const halfWidth = rect ? Math.max(200, rect.width * 0.45) : 340;
     const rawProgress = drag.direction === 'next' ? -dx / halfWidth : dx / halfWidth;
     const progress = Math.max(0.02, Math.min(0.96, rawProgress));
     const toPage = drag.direction === 'next' ? safePage + 1 : safePage - 1;
 
     if (toPage >= 0 && toPage <= backCoverPage) {
-      const nextFlip = {
-        direction: drag.direction,
-        fromPage: safePage,
-        toPage,
-        progress,
-        isDragging: true,
-      };
-      drag.flip = nextFlip;
-      setFlipState(nextFlip);
+      flipProgressRef.current = progress;
+      if (!drag.flip) {
+        const nextFlip = {
+          direction: drag.direction,
+          fromPage: safePage,
+          toPage,
+          initialProgress: progress,
+          isDragging: true,
+        };
+        drag.flip = nextFlip;
+        setFlipState(nextFlip);
+      } else {
+        applyFlipDomProgress(drag.flip, progress);
+      }
     }
   };
 
@@ -569,6 +720,7 @@ export default function PhysicalCatalogBookSection({
 
     const wasMoved = drag.hasMoved;
     const latestFlip = drag.flip || (flipState?.isDragging ? flipState : null);
+    const lastVelocityX = drag.velocityX;
     drag.active = false;
     drag.pointerId = null;
     drag.flip = null;
@@ -586,16 +738,20 @@ export default function PhysicalCatalogBookSection({
     }
 
     if (latestFlip) {
+      const currentProgress = flipProgressRef.current;
       const isCancelled = e.type === 'pointercancel';
-      if (isCancelled && latestFlip.progress < 0.08) {
+      const signedVelocity = latestFlip.direction === 'next' ? -lastVelocityX : lastVelocityX;
+      if (isCancelled && currentProgress < 0.08) {
         setFlipState(null);
       } else {
-        const shouldComplete = !isCancelled && latestFlip.progress > 0.26;
+        const shouldComplete =
+          !isCancelled &&
+          (currentProgress > 0.18 || (signedVelocity > 0.28 && currentProgress > 0.05));
         animatePaperFlip(
           latestFlip.direction,
           latestFlip.fromPage,
           latestFlip.toPage,
-          latestFlip.progress,
+          currentProgress,
           shouldComplete
         );
       }
@@ -604,16 +760,20 @@ export default function PhysicalCatalogBookSection({
     }
   };
 
-  // Swipe drag handler Mobile (menggerakkan animasi 3D langsung)
+  // Swipe drag handler Mobile (menggerakkan animasi 3D langsung tanpa re-render per frame)
   const handleMobilePointerDown = (e) => {
     if (!isMobile || flipState || mobileDragRef.current.active) return;
     suppressNextClickRef.current = false;
     if (e.target.closest('button, a, input, select')) return;
+    const now = performance.now();
     mobileDragRef.current = {
       active: true,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
+      lastX: e.clientX,
+      lastTime: now,
+      velocityX: 0,
       direction: null,
       hasMoved: false,
       flip: null,
@@ -628,7 +788,7 @@ export default function PhysicalCatalogBookSection({
     const dy = e.clientY - drag.startY;
 
     if (!drag.hasMoved) {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
       if (Math.abs(dy) > Math.abs(dx) * 1.25) {
         drag.active = false;
         drag.pointerId = null;
@@ -657,22 +817,36 @@ export default function PhysicalCatalogBookSection({
       }
     }
 
+    const now = performance.now();
+    const dt = now - drag.lastTime;
+    if (dt > 0) {
+      const instV = (e.clientX - drag.lastX) / dt;
+      drag.velocityX = drag.velocityX * 0.4 + instV * 0.6;
+      drag.lastX = e.clientX;
+      drag.lastTime = now;
+    }
+
     const rect = mobileStageRef.current?.getBoundingClientRect();
-    const width = rect ? Math.max(220, rect.width * 0.72) : 260;
+    const width = rect ? Math.max(200, rect.width * 0.72) : 260;
     const rawProgress = drag.direction === 'next' ? -dx / width : dx / width;
     const progress = Math.max(0.02, Math.min(0.96, rawProgress));
     const toPage = drag.direction === 'next' ? safePage + 1 : safePage - 1;
 
     if (toPage >= 0 && toPage <= backCoverPage) {
-      const nextFlip = {
-        direction: drag.direction,
-        fromPage: safePage,
-        toPage,
-        progress,
-        isDragging: true,
-      };
-      drag.flip = nextFlip;
-      setFlipState(nextFlip);
+      flipProgressRef.current = progress;
+      if (!drag.flip) {
+        const nextFlip = {
+          direction: drag.direction,
+          fromPage: safePage,
+          toPage,
+          initialProgress: progress,
+          isDragging: true,
+        };
+        drag.flip = nextFlip;
+        setFlipState(nextFlip);
+      } else {
+        applyFlipDomProgress(drag.flip, progress);
+      }
     }
   };
 
@@ -688,6 +862,7 @@ export default function PhysicalCatalogBookSection({
 
     const wasMoved = drag.hasMoved;
     const latestFlip = drag.flip || (flipState?.isDragging ? flipState : null);
+    const lastVelocityX = drag.velocityX;
     drag.active = false;
     drag.pointerId = null;
     drag.flip = null;
@@ -705,16 +880,20 @@ export default function PhysicalCatalogBookSection({
     }
 
     if (latestFlip) {
+      const currentProgress = flipProgressRef.current;
       const isCancelled = e.type === 'pointercancel';
-      if (isCancelled && latestFlip.progress < 0.08) {
+      const signedVelocity = latestFlip.direction === 'next' ? -lastVelocityX : lastVelocityX;
+      if (isCancelled && currentProgress < 0.08) {
         setFlipState(null);
       } else {
-        const shouldComplete = !isCancelled && latestFlip.progress > 0.22;
+        const shouldComplete =
+          !isCancelled &&
+          (currentProgress > 0.18 || (signedVelocity > 0.28 && currentProgress > 0.05));
         animatePaperFlip(
           latestFlip.direction,
           latestFlip.fromPage,
           latestFlip.toPage,
-          latestFlip.progress,
+          currentProgress,
           shouldComplete
         );
       }
@@ -1790,6 +1969,8 @@ export default function PhysicalCatalogBookSection({
     ((flipState.toPage === backCoverPage && isSpreadPage(flipState.fromPage)) ||
       (flipState.fromPage === backCoverPage && isSpreadPage(flipState.toPage)));
 
+  const initProgress = flipState ? flipState.initialProgress : 0;
+
   const frontSpreadTarget = isFrontCoverTransition
     ? flipState.fromPage === 0
       ? flipState.toPage
@@ -1797,8 +1978,8 @@ export default function PhysicalCatalogBookSection({
     : 1;
   const frontOpenAmount = isFrontCoverTransition
     ? flipState.fromPage === 0
-      ? flipState.progress
-      : 1 - flipState.progress
+      ? initProgress
+      : 1 - initProgress
     : 0;
   const frontArch = Math.sin(frontOpenAmount * Math.PI);
 
@@ -1809,8 +1990,8 @@ export default function PhysicalCatalogBookSection({
     : backCoverPage - 1;
   const backClosedAmount = isBackCoverTransition
     ? flipState.toPage === backCoverPage
-      ? flipState.progress
-      : 1 - flipState.progress
+      ? initProgress
+      : 1 - initProgress
     : 0;
   const backArch = Math.sin(backClosedAmount * Math.PI);
 
@@ -1828,12 +2009,12 @@ export default function PhysicalCatalogBookSection({
 
   const turnAngle = isTurningBetweenSpreads
     ? flipState.direction === 'next'
-      ? -flipState.progress * 180
-      : flipState.progress * 180
+      ? -initProgress * 180
+      : initProgress * 180
     : 0;
-  const archIntensity = isTurningBetweenSpreads ? Math.sin(flipState.progress * Math.PI) : 0;
+  const archIntensity = isTurningBetweenSpreads ? Math.sin(initProgress * Math.PI) : 0;
 
-  // Variabel animasi 3D untuk pembaca mobile 1-lembar
+  // Variabel animasi 3D awal untuk pembaca mobile 1-lembar (diperbarui langsung via ref agar 60fps)
   const mobileIsNext = flipState?.direction === 'next';
   const mobileBasePage = flipState
     ? mobileIsNext
@@ -1847,20 +2028,20 @@ export default function PhysicalCatalogBookSection({
     : safePage;
   const mobileLeafAngle = flipState
     ? mobileIsNext
-      ? -flipState.progress * 90
-      : -(1 - flipState.progress) * 90
+      ? -initProgress * 90
+      : -(1 - initProgress) * 90
     : 0;
   const mobileLeafOpacity = flipState
     ? mobileIsNext
-      ? flipState.progress > 0.92
-        ? Math.max(0, 1 - (flipState.progress - 0.92) / 0.08)
+      ? initProgress > 0.92
+        ? Math.max(0, 1 - (initProgress - 0.92) / 0.08)
         : 1
-      : flipState.progress < 0.08
-        ? Math.max(0, flipState.progress / 0.08)
+      : initProgress < 0.08
+        ? Math.max(0, initProgress / 0.08)
         : 1
     : 1;
   const mobileLeafArch = flipState
-    ? Math.sin((mobileIsNext ? flipState.progress : 1 - flipState.progress) * Math.PI)
+    ? Math.sin((mobileIsNext ? initProgress : 1 - initProgress) * Math.PI)
     : 0;
 
   const canGoPrev = safePage > 0;
@@ -2441,11 +2622,12 @@ export default function PhysicalCatalogBookSection({
 
                   {flipState && (
                     <div
+                      ref={(el) => {
+                        flipDomRef.current.mobileShadow = el;
+                      }}
                       className="pointer-events-none absolute inset-0 rounded-lg z-20"
                       style={{
-                        opacity: mobileIsNext
-                          ? (1 - flipState.progress) * 0.42
-                          : flipState.progress * 0.42,
+                        opacity: mobileIsNext ? (1 - initProgress) * 0.42 : initProgress * 0.42,
                         background:
                           'linear-gradient(to right, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.12) 45%, transparent 100%)',
                       }}
@@ -2456,6 +2638,9 @@ export default function PhysicalCatalogBookSection({
                 {/* Lembar kertas 3D yang berputar dari jilid kiri (0deg <-> -90deg) */}
                 {flipState && (
                   <div
+                    ref={(el) => {
+                      flipDomRef.current.mobileLeaf = el;
+                    }}
                     style={{
                       transformOrigin: 'left center',
                       transform: `rotateY(${mobileLeafAngle}deg)`,
@@ -2463,11 +2648,17 @@ export default function PhysicalCatalogBookSection({
                     className="book-turning-leaf pointer-events-none absolute inset-0 z-30"
                   >
                     <div
+                      ref={(el) => {
+                        flipDomRef.current.mobileLeafFace = el;
+                      }}
                       style={{ opacity: mobileLeafOpacity }}
                       className="book-leaf-face absolute inset-0"
                     >
                       {renderMobileSheetWithFrame(mobileLeafPage, false)}
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.mobileLeafSheen = el;
+                        }}
                         className="absolute inset-0 rounded-lg pointer-events-none"
                         style={{
                           opacity: 0.2 + mobileLeafArch * 0.65,
@@ -2517,6 +2708,9 @@ export default function PhysicalCatalogBookSection({
                 >
               {isFrontCoverTransition ? (
                 <div
+                  ref={(el) => {
+                    flipDomRef.current.frontShift = el;
+                  }}
                   style={{
                     transform: `translateX(${-(1 - frontOpenAmount) * 25}%)`,
                   }}
@@ -2530,6 +2724,9 @@ export default function PhysicalCatalogBookSection({
                     <div className="relative h-full rounded-lg lg:rounded-l-none lg:rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
                       {renderSpreadSide(frontSpreadTarget, 'right', false)}
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.frontShadow = el;
+                        }}
                         className="pointer-events-none absolute inset-0 z-20"
                         style={{
                           opacity: Math.max(0, (1 - frontOpenAmount) * 0.55),
@@ -2540,6 +2737,9 @@ export default function PhysicalCatalogBookSection({
                     </div>
 
                     <div
+                      ref={(el) => {
+                        flipDomRef.current.frontLeaf = el;
+                      }}
                       style={{
                         left: '50%',
                         width: '50%',
@@ -2549,11 +2749,17 @@ export default function PhysicalCatalogBookSection({
                       className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                     >
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.frontLeafFront = el;
+                        }}
                         style={{ visibility: frontOpenAmount >= 0.5 ? 'hidden' : 'visible' }}
                         className="book-leaf-face absolute inset-0"
                       >
                         {renderFrontCoverFace(false)}
                         <div
+                          ref={(el) => {
+                            flipDomRef.current.frontLeafFrontSheen = el;
+                          }}
                           className="absolute inset-0 rounded-r-lg rounded-l-sm pointer-events-none"
                           style={{
                             opacity: frontArch * 0.65,
@@ -2564,11 +2770,17 @@ export default function PhysicalCatalogBookSection({
                       </div>
 
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.frontLeafBack = el;
+                        }}
                         style={{ visibility: frontOpenAmount < 0.5 ? 'hidden' : 'visible' }}
                         className="book-leaf-face book-leaf-back absolute inset-0 rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]"
                       >
                         {renderSpreadSide(frontSpreadTarget, 'left', false)}
                         <div
+                          ref={(el) => {
+                            flipDomRef.current.frontLeafBackSheen = el;
+                          }}
                           className="absolute inset-0 pointer-events-none"
                           style={{
                             opacity: frontArch * 0.6,
@@ -2582,6 +2794,9 @@ export default function PhysicalCatalogBookSection({
                 </div>
               ) : isBackCoverTransition ? (
                 <div
+                  ref={(el) => {
+                    flipDomRef.current.backShift = el;
+                  }}
                   style={{
                     transform: `translateX(${backClosedAmount * 25}%)`,
                   }}
@@ -2593,6 +2808,9 @@ export default function PhysicalCatalogBookSection({
                     <div className="relative h-full rounded-lg lg:rounded-r-none lg:rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
                       {renderSpreadSide(backSpreadTarget, 'left', false)}
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.backShadow = el;
+                        }}
                         className="pointer-events-none absolute inset-0 z-20"
                         style={{
                           opacity: Math.max(0, backClosedAmount * 0.55),
@@ -2605,6 +2823,9 @@ export default function PhysicalCatalogBookSection({
                     <div className="hidden lg:block pointer-events-none" />
 
                     <div
+                      ref={(el) => {
+                        flipDomRef.current.backLeaf = el;
+                      }}
                       style={{
                         left: '0%',
                         width: '50%',
@@ -2614,11 +2835,17 @@ export default function PhysicalCatalogBookSection({
                       className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                     >
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.backLeafFront = el;
+                        }}
                         style={{ visibility: backClosedAmount <= 0.5 ? 'hidden' : 'visible' }}
                         className="book-leaf-face absolute inset-0"
                       >
                         {renderBackCoverFace(false)}
                         <div
+                          ref={(el) => {
+                            flipDomRef.current.backLeafFrontSheen = el;
+                          }}
                           className="absolute inset-0 rounded-l-lg rounded-r-sm pointer-events-none"
                           style={{
                             opacity: backArch * 0.65,
@@ -2629,11 +2856,17 @@ export default function PhysicalCatalogBookSection({
                       </div>
 
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.backLeafBack = el;
+                        }}
                         style={{ visibility: backClosedAmount > 0.5 ? 'hidden' : 'visible' }}
                         className="book-leaf-face book-leaf-back absolute inset-0 rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]"
                       >
                         {renderSpreadSide(backSpreadTarget, 'right', false)}
                         <div
+                          ref={(el) => {
+                            flipDomRef.current.backLeafBackSheen = el;
+                          }}
                           className="absolute inset-0 pointer-events-none"
                           style={{
                             opacity: backArch * 0.6,
@@ -2666,12 +2899,15 @@ export default function PhysicalCatalogBookSection({
 
                       {isTurningBetweenSpreads && (
                         <div
+                          ref={(el) => {
+                            flipDomRef.current.spreadLeftShadow = el;
+                          }}
                           className="pointer-events-none absolute inset-0 z-20"
                           style={{
                             opacity:
                               flipState.direction === 'next'
-                                ? Math.max(0, (flipState.progress - 0.35) * 1.1)
-                                : Math.max(0, (0.65 - flipState.progress) * 1.1),
+                                ? Math.max(0, (initProgress - 0.35) * 1.1)
+                                : Math.max(0, (0.65 - initProgress) * 1.1),
                             background:
                               'linear-gradient(to left, rgba(28,18,12,0.25) 0%, rgba(44,36,30,0.06) 45%, transparent 100%)',
                           }}
@@ -2684,12 +2920,15 @@ export default function PhysicalCatalogBookSection({
 
                       {isTurningBetweenSpreads && (
                         <div
+                          ref={(el) => {
+                            flipDomRef.current.spreadRightShadow = el;
+                          }}
                           className="pointer-events-none absolute inset-0 z-20"
                           style={{
                             opacity:
                               flipState.direction === 'next'
-                                ? Math.max(0, (0.65 - flipState.progress) * 1.1)
-                                : Math.max(0, (flipState.progress - 0.35) * 1.1),
+                                ? Math.max(0, (0.65 - initProgress) * 1.1)
+                                : Math.max(0, (initProgress - 0.35) * 1.1),
                             background:
                               'linear-gradient(to right, rgba(28,18,12,0.28) 0%, rgba(44,36,30,0.08) 45%, transparent 100%)',
                           }}
@@ -2707,6 +2946,9 @@ export default function PhysicalCatalogBookSection({
 
                     {isTurningBetweenSpreads && (
                       <div
+                        ref={(el) => {
+                          flipDomRef.current.spreadLeaf = el;
+                        }}
                         style={{
                           left: flipState.direction === 'next' ? '50%' : '0%',
                           width: '50%',
@@ -2717,7 +2959,10 @@ export default function PhysicalCatalogBookSection({
                         className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                       >
                         <div
-                          style={{ visibility: flipState.progress >= 0.5 ? 'hidden' : 'visible' }}
+                          ref={(el) => {
+                            flipDomRef.current.spreadLeafFront = el;
+                          }}
+                          style={{ visibility: initProgress >= 0.5 ? 'hidden' : 'visible' }}
                           className="book-leaf-face absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-l border-[#1C1917]/15"
                         >
                           {renderSpreadSide(
@@ -2726,27 +2971,25 @@ export default function PhysicalCatalogBookSection({
                             false
                           )}
                           <div
+                            ref={(el) => {
+                              flipDomRef.current.spreadLeafFrontSheen = el;
+                            }}
                             className="absolute inset-0 pointer-events-none"
                             style={{
                               opacity: 0.25 + archIntensity * 0.75,
                               background:
                                 flipState.direction === 'next'
-                                  ? `linear-gradient(90deg,
-                                      rgba(25,15,10,0.25) 0%,
-                                      rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
-                                      rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
-                                      rgba(255,255,255,0.22) 100%)`
-                                  : `linear-gradient(270deg,
-                                      rgba(25,15,10,0.25) 0%,
-                                      rgba(255,255,255,0.45) ${Math.max(12, 55 - flipState.progress * 38)}%,
-                                      rgba(44,36,30,0.14) ${Math.max(25, 76 - flipState.progress * 32)}%,
-                                      rgba(255,255,255,0.22) 100%)`,
+                                  ? 'linear-gradient(90deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.45) 45%, rgba(44,36,30,0.14) 70%, rgba(255,255,255,0.22) 100%)'
+                                  : 'linear-gradient(270deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.45) 45%, rgba(44,36,30,0.14) 70%, rgba(255,255,255,0.22) 100%)',
                             }}
                           />
                         </div>
 
                         <div
-                          style={{ visibility: flipState.progress < 0.5 ? 'hidden' : 'visible' }}
+                          ref={(el) => {
+                            flipDomRef.current.spreadLeafBack = el;
+                          }}
+                          style={{ visibility: initProgress < 0.5 ? 'hidden' : 'visible' }}
                           className="book-leaf-face book-leaf-back absolute inset-0 overflow-hidden bg-[#FAF8F3] shadow-[0_18px_40px_rgba(24,18,14,0.3)] border-r border-[#1C1917]/15"
                         >
                           {renderSpreadSide(
@@ -2755,21 +2998,16 @@ export default function PhysicalCatalogBookSection({
                             false
                           )}
                           <div
+                            ref={(el) => {
+                              flipDomRef.current.spreadLeafBackSheen = el;
+                            }}
                             className="absolute inset-0 pointer-events-none"
                             style={{
                               opacity: 0.25 + archIntensity * 0.75,
                               background:
                                 flipState.direction === 'next'
-                                  ? `linear-gradient(270deg,
-                                      rgba(25,15,10,0.24) 0%,
-                                      rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
-                                      rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
-                                      rgba(255,255,255,0.18) 100%)`
-                                  : `linear-gradient(90deg,
-                                      rgba(25,15,10,0.24) 0%,
-                                      rgba(255,255,255,0.42) ${Math.min(88, 22 + flipState.progress * 42)}%,
-                                      rgba(44,36,30,0.12) ${Math.min(96, 44 + flipState.progress * 38)}%,
-                                      rgba(255,255,255,0.18) 100%)`,
+                                  ? 'linear-gradient(270deg, rgba(25,15,10,0.24) 0%, rgba(255,255,255,0.42) 45%, rgba(44,36,30,0.12) 70%, rgba(255,255,255,0.18) 100%)'
+                                  : 'linear-gradient(90deg, rgba(25,15,10,0.24) 0%, rgba(255,255,255,0.42) 45%, rgba(44,36,30,0.12) 70%, rgba(255,255,255,0.18) 100%)',
                             }}
                           />
                         </div>

@@ -995,7 +995,7 @@ export default function UserCatalogPage({
                       <FadeIn className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
                         <div className="space-y-1.5">
                           <p className="text-[13px] text-[#575049]">
-                            {bk.products.length} koleksi aktif
+                            {bk.products.length} koleksi
                           </p>
                           <h3 className="font-serif font-normal text-2xl sm:text-[28px] leading-tight text-[#1C1917]">
                             {bk.shop.name}
@@ -1068,14 +1068,19 @@ export default function UserCatalogPage({
                                 >
                                   <article className="h-full rounded-xl border border-[#1C1917]/12 bg-[#FCFBF8] overflow-hidden flex flex-col justify-between taste-card">
                                     <div>
-                                      <div className="aspect-[4/3] overflow-hidden border-b border-[#1C1917]/10 bg-[#EFEAE0] taste-zoom-frame">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenBookProduct(prod.shop.id, prod.id)}
+                                        aria-label={`Lihat detail ${prod.name}`}
+                                        className="block w-full text-left aspect-[4/3] overflow-hidden border-b border-[#1C1917]/10 bg-[#EFEAE0] taste-zoom-frame cursor-pointer"
+                                      >
                                         <ProductArtwork
                                           product={prod}
                                           imageUrl={prod.primaryImageUrl}
                                           size={400}
                                           className="w-full h-full"
                                         />
-                                      </div>
+                                      </button>
 
                                       <div className="p-5 space-y-3">
                                         <div className="flex items-baseline justify-between gap-3">
@@ -1088,7 +1093,15 @@ export default function UserCatalogPage({
                                         </div>
 
                                         <h4 className="font-serif text-[20px] font-medium text-[#1C1917] leading-snug">
-                                          {prod.name}
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleOpenBookProduct(prod.shop.id, prod.id)
+                                            }
+                                            className="text-left hover:text-[#7C3219] transition-colors cursor-pointer"
+                                          >
+                                            {prod.name}
+                                          </button>
                                         </h4>
 
                                         <p className="text-[14px] text-[#575049] line-clamp-2 leading-relaxed">
@@ -1238,7 +1251,7 @@ export default function UserCatalogPage({
                 Menghubungkan pengunjung langsung dengan perajin batik asli Kabupaten Trenggalek.
               </p>
               <p className="text-[13px] font-medium text-[#F5F1E8] tabular-nums">
-                {activeShops.length} sanggar aktif · {enrichedProducts.length} koleksi
+                {activeShops.length} sanggar · {enrichedProducts.length} koleksi
               </p>
             </div>
           </div>
