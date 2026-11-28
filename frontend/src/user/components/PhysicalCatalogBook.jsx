@@ -25,6 +25,9 @@ import {
 // Tinggi seragam untuk semua lembar buku di mobile & desktop (tanpa internal scrollbar)
 const BOOK_FRAME_HEIGHT = 'h-[560px] sm:h-[580px] lg:h-[clamp(540px,68vh,640px)]';
 
+const DEFAULT_SHOP_DOC_PHOTOS = ['/shops/sanggar-proses-1.jpg', '/shops/sanggar-proses-2.jpg'];
+const SHOP_DOC_PHOTOS_OVERRIDES = {};
+
 function InstagramIcon({ className = 'w-4 h-4' }) {
   return (
     <svg
@@ -190,18 +193,30 @@ function deriveShopInsights(shop, products) {
     materials = Array.from(matSet);
   }
 
-  const docPhotos =
-    Array.isArray(shop.process_photos) && shop.process_photos.length > 0
-      ? shop.process_photos.slice(0, 2).map((url, idx) => ({
-          id: `proc-${idx}`,
-          imageUrl: typeof url === 'string' ? url : url?.public_url || url?.image_url || '',
-          product: products[idx] || products[0] || null,
-        }))
-      : products.slice(0, 2).map((prod) => ({
-          id: prod.id,
-          imageUrl: prod.primaryImageUrl,
-          product: prod,
-        }));
+  const overridePhotos =
+    SHOP_DOC_PHOTOS_OVERRIDES[String(shop.id)] ||
+    SHOP_DOC_PHOTOS_OVERRIDES[String(shop.name || '').trim().toLowerCase()];
+
+  let docPhotos = [];
+  if (Array.isArray(shop.process_photos) && shop.process_photos.length > 0) {
+    docPhotos = shop.process_photos.slice(0, 2).map((url, idx) => ({
+      id: `proc-${idx}`,
+      imageUrl: typeof url === 'string' ? url : url?.public_url || url?.image_url || '',
+      product: products[idx] || products[0] || null,
+      isLocal: false,
+    }));
+  } else {
+    const localList =
+      Array.isArray(overridePhotos) && overridePhotos.length > 0
+        ? overridePhotos
+        : DEFAULT_SHOP_DOC_PHOTOS;
+    docPhotos = localList.slice(0, 2).map((localPath, idx) => ({
+      id: `local-doc-${idx}`,
+      imageUrl: localPath,
+      alt: `Suasana sanggar ${shop.name} (${idx + 1})`,
+      isLocal: true,
+    }));
+  }
 
   return { signatureMotifs, techniques, materials, docPhotos };
 }
@@ -285,17 +300,21 @@ export default function PhysicalCatalogBookSection({
   const suppressNextClickRef = useRef(false);
   const dragStartRef = useRef({
     active: false,
+    pointerId: null,
     startX: 0,
     startY: 0,
     direction: null,
     hasMoved: false,
+    flip: null,
   });
   const mobileDragRef = useRef({
     active: false,
+    pointerId: null,
     startX: 0,
     startY: 0,
     direction: null,
     hasMoved: false,
+    flip: null,
   });
   const animFrameRef = useRef(null);
 
@@ -307,6 +326,12 @@ export default function PhysicalCatalogBookSection({
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
+      dragStartRef.current.active = false;
+      dragStartRef.current.pointerId = null;
+      dragStartRef.current.flip = null;
+      mobileDragRef.current.active = false;
+      mobileDragRef.current.pointerId = null;
+      mobileDragRef.current.flip = null;
       setFlipState(null);
       setIsMobile(e.matches);
     };
@@ -417,7 +442,16 @@ export default function PhysicalCatalogBookSection({
   );
 
   const handleSwitchShopBook = (shopId) => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    dragStartRef.current.active = false;
+    dragStartRef.current.pointerId = null;
+    dragStartRef.current.flip = null;
+    mobileDragRef.current.active = false;
+    mobileDragRef.current.pointerId = null;
+    mobileDragRef.current.flip = null;
     setFlipState(null);
     setCornerHover(null);
     setDetailModal(null);
@@ -451,7 +485,7 @@ export default function PhysicalCatalogBookSection({
 
   // Drag handler Desktop
   const handleBookPointerDown = (e) => {
-    if (isMobile || flipState) return;
+    if (isMobile || flipState || dragStartRef.current.active) return;
     suppressNextClickRef.current = false;
     if (e.target.closest('button, a, input, select')) return;
 
@@ -473,22 +507,26 @@ export default function PhysicalCatalogBookSection({
     if (!direction) return;
     dragStartRef.current = {
       active: true,
+      pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       direction,
       hasMoved: false,
+      flip: null,
     };
   };
 
   const handleBookPointerMove = (e) => {
     const drag = dragStartRef.current;
-    if (!drag.active) return;
+    if (!drag.active || (drag.pointerId !== null && e.pointerId !== drag.pointerId)) return;
 
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     if (!drag.hasMoved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
     if (!drag.hasMoved && Math.abs(dy) > Math.abs(dx) * 1.35) {
       drag.active = false;
+      drag.pointerId = null;
+      drag.flip = null;
       return;
     }
 
@@ -507,21 +545,34 @@ export default function PhysicalCatalogBookSection({
     const toPage = drag.direction === 'next' ? safePage + 1 : safePage - 1;
 
     if (toPage >= 0 && toPage <= backCoverPage) {
-      setFlipState({
+      const nextFlip = {
         direction: drag.direction,
         fromPage: safePage,
         toPage,
         progress,
         isDragging: true,
-      });
+      };
+      drag.flip = nextFlip;
+      setFlipState(nextFlip);
     }
   };
 
   const handleBookPointerUp = (e) => {
     const drag = dragStartRef.current;
-    if (!drag.active) return;
+    if (!drag.active) {
+      if (flipState?.isDragging && !animFrameRef.current) {
+        setFlipState(null);
+      }
+      return;
+    }
+    if (drag.pointerId !== null && e.pointerId !== drag.pointerId) return;
+
     const wasMoved = drag.hasMoved;
+    const latestFlip = drag.flip || (flipState?.isDragging ? flipState : null);
     drag.active = false;
+    drag.pointerId = null;
+    drag.flip = null;
+
     try {
       if (e.currentTarget?.hasPointerCapture?.(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -534,35 +585,44 @@ export default function PhysicalCatalogBookSection({
       suppressNextClickRef.current = true;
     }
 
-    if (flipState && flipState.isDragging) {
-      const shouldComplete = flipState.progress > 0.26;
-      animatePaperFlip(
-        flipState.direction,
-        flipState.fromPage,
-        flipState.toPage,
-        flipState.progress,
-        shouldComplete
-      );
+    if (latestFlip) {
+      const isCancelled = e.type === 'pointercancel';
+      if (isCancelled && latestFlip.progress < 0.08) {
+        setFlipState(null);
+      } else {
+        const shouldComplete = !isCancelled && latestFlip.progress > 0.26;
+        animatePaperFlip(
+          latestFlip.direction,
+          latestFlip.fromPage,
+          latestFlip.toPage,
+          latestFlip.progress,
+          shouldComplete
+        );
+      }
+    } else if (flipState?.isDragging) {
+      setFlipState(null);
     }
   };
 
   // Swipe drag handler Mobile (menggerakkan animasi 3D langsung)
   const handleMobilePointerDown = (e) => {
-    if (!isMobile || flipState) return;
+    if (!isMobile || flipState || mobileDragRef.current.active) return;
     suppressNextClickRef.current = false;
     if (e.target.closest('button, a, input, select')) return;
     mobileDragRef.current = {
       active: true,
+      pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       direction: null,
       hasMoved: false,
+      flip: null,
     };
   };
 
   const handleMobilePointerMove = (e) => {
     const drag = mobileDragRef.current;
-    if (!drag.active) return;
+    if (!drag.active || (drag.pointerId !== null && e.pointerId !== drag.pointerId)) return;
 
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
@@ -571,15 +631,21 @@ export default function PhysicalCatalogBookSection({
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       if (Math.abs(dy) > Math.abs(dx) * 1.25) {
         drag.active = false;
+        drag.pointerId = null;
+        drag.flip = null;
         return;
       }
       const dir = dx < 0 ? 'next' : 'prev';
       if (dir === 'next' && safePage >= backCoverPage) {
         drag.active = false;
+        drag.pointerId = null;
+        drag.flip = null;
         return;
       }
       if (dir === 'prev' && safePage <= 0) {
         drag.active = false;
+        drag.pointerId = null;
+        drag.flip = null;
         return;
       }
       drag.direction = dir;
@@ -598,21 +664,34 @@ export default function PhysicalCatalogBookSection({
     const toPage = drag.direction === 'next' ? safePage + 1 : safePage - 1;
 
     if (toPage >= 0 && toPage <= backCoverPage) {
-      setFlipState({
+      const nextFlip = {
         direction: drag.direction,
         fromPage: safePage,
         toPage,
         progress,
         isDragging: true,
-      });
+      };
+      drag.flip = nextFlip;
+      setFlipState(nextFlip);
     }
   };
 
   const handleMobilePointerUp = (e) => {
     const drag = mobileDragRef.current;
-    if (!drag.active) return;
+    if (!drag.active) {
+      if (flipState?.isDragging && !animFrameRef.current) {
+        setFlipState(null);
+      }
+      return;
+    }
+    if (drag.pointerId !== null && e.pointerId !== drag.pointerId) return;
+
     const wasMoved = drag.hasMoved;
+    const latestFlip = drag.flip || (flipState?.isDragging ? flipState : null);
     drag.active = false;
+    drag.pointerId = null;
+    drag.flip = null;
+
     try {
       if (e.currentTarget?.hasPointerCapture?.(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -625,15 +704,22 @@ export default function PhysicalCatalogBookSection({
       suppressNextClickRef.current = true;
     }
 
-    if (flipState && flipState.isDragging) {
-      const shouldComplete = flipState.progress > 0.22;
-      animatePaperFlip(
-        flipState.direction,
-        flipState.fromPage,
-        flipState.toPage,
-        flipState.progress,
-        shouldComplete
-      );
+    if (latestFlip) {
+      const isCancelled = e.type === 'pointercancel';
+      if (isCancelled && latestFlip.progress < 0.08) {
+        setFlipState(null);
+      } else {
+        const shouldComplete = !isCancelled && latestFlip.progress > 0.22;
+        animatePaperFlip(
+          latestFlip.direction,
+          latestFlip.fromPage,
+          latestFlip.toPage,
+          latestFlip.progress,
+          shouldComplete
+        );
+      }
+    } else if (flipState?.isDragging) {
+      setFlipState(null);
     }
   };
 
@@ -955,12 +1041,21 @@ export default function PhysicalCatalogBookSection({
                   key={item.id}
                   className="h-[108px] rounded-md overflow-hidden border border-[#1C1917]/12 bg-[#EFEAE0]"
                 >
-                  <ProductArtwork
-                    product={item.product || { name: shop.name, shop_id: shop.id }}
-                    imageUrl={item.imageUrl}
-                    size={300}
-                    className="w-full h-full"
-                  />
+                  {item.isLocal ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.alt || shop.name}
+                      loading="eager"
+                      className="w-full h-full object-cover object-[center_35%]"
+                    />
+                  ) : (
+                    <ProductArtwork
+                      product={item.product || { name: shop.name, shop_id: shop.id }}
+                      imageUrl={item.imageUrl}
+                      size={300}
+                      className="w-full h-full"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -1457,12 +1552,21 @@ export default function PhysicalCatalogBookSection({
                   key={item.id}
                   className="h-[84px] rounded-md overflow-hidden border border-[#1C1917]/12 bg-[#EFEAE0]"
                 >
-                  <ProductArtwork
-                    product={item.product || { name: shop.name, shop_id: shop.id }}
-                    imageUrl={item.imageUrl}
-                    size={260}
-                    className="w-full h-full"
-                  />
+                  {item.isLocal ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.alt || shop.name}
+                      loading="eager"
+                      className="w-full h-full object-cover object-[center_35%]"
+                    />
+                  ) : (
+                    <ProductArtwork
+                      product={item.product || { name: shop.name, shop_id: shop.id }}
+                      imageUrl={item.imageUrl}
+                      size={260}
+                      className="w-full h-full"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -2209,7 +2313,7 @@ export default function PhysicalCatalogBookSection({
         <FadeIn>
           <div className="mb-3">
             <h2 className="font-serif font-normal text-[clamp(1.6rem,2.6vw,2.2rem)] leading-[1.12] tracking-[-0.025em] text-[#1C1917]">
-              Buku Katalog — {shop.name}
+              Buku Katalog {shop.name}
             </h2>
           </div>
 
@@ -2328,6 +2432,7 @@ export default function PhysicalCatalogBookSection({
                 onPointerMove={handleMobilePointerMove}
                 onPointerUp={handleMobilePointerUp}
                 onPointerCancel={handleMobilePointerUp}
+                onLostPointerCapture={handleMobilePointerUp}
                 className={`book-3d-stage relative select-none touch-pan-y ${BOOK_FRAME_HEIGHT}`}
               >
                 {/* Lembar dasar yang tersingkap di bawah */}
@@ -2407,7 +2512,8 @@ export default function PhysicalCatalogBookSection({
                   onPointerMove={handleBookPointerMove}
                   onPointerUp={handleBookPointerUp}
                   onPointerCancel={handleBookPointerUp}
-                  className="relative mx-auto select-none"
+                  onLostPointerCapture={handleBookPointerUp}
+                  className="relative mx-auto select-none touch-pan-y"
                 >
               {isFrontCoverTransition ? (
                 <div
@@ -2799,7 +2905,7 @@ export default function PhysicalCatalogBookSection({
           ) : (
             <div className="mt-4 hidden lg:flex flex-col items-center gap-2 text-center">
               <span className="text-[13px] text-[#575049]">
-                Klik panah atau seret sudut buku untuk membalik ·{' '}
+                Klik panah atau sudut buku untuk membalik ·{' '}
                 <strong className="font-medium text-[#1C1917] tabular-nums">
                   Lembar {safePage + 1} dari {totalBookPages}
                 </strong>
