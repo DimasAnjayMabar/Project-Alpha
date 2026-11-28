@@ -22,6 +22,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -125,7 +126,9 @@ class QueryAnalysis:
     is_knowledge_ask:     bool
     has_back_reference:   bool
     ordinal_index:        Optional[int]
+    min_harga:            Optional[int]
     max_harga:            Optional[int]
+    target_harga:         Optional[int]
     keyword_candidate:    str
 
 
@@ -324,19 +327,21 @@ class HarnessPipeline:
     }
 
     _RECOMMENDATION_WORDS = {
-        "rekomendasi", "rekomendasikan", "rekom", "saran", "sarankan",
-        "cari", "carikan", "daftar", "list", "pilihan", "koleksi", "katalog",
-        "beli", "order", "pesan", "jual", "murah", "termurah", "terbaik",
-        "bagus", "populer", "favorit", "terlaris", "premium", "budget",
-        "dibawah", "max", "maksimal", "recommend", "popular", "suggest",
-        "buy", "catalog", "available",
+        "rekomendasi", "rekomendasikan", "rekomendasiin", "rekomen", "rekom",
+        "saran", "sarankan", "saranin", "cari", "carikan", "daftar", "list",
+        "pilihan", "koleksi", "katalog", "beli", "order", "pesan", "jual",
+        "murah", "termurah", "terbaik", "bagus", "populer", "favorit",
+        "terlaris", "premium", "budget", "dibawah", "diatas", "max", "maks",
+        "maksimal", "minimal", "recommend", "popular", "suggest", "buy",
+        "catalog", "available", "above", "over",
     }
     _RECOMMENDATION_PHRASES = (
-        "di bawah", "kurang dari", "apa saja", "apa aja",
+        "di bawah", "di atas", "kurang dari", "lebih dari", "mulai dari",
+        "apa saja", "apa aja",
         "ada batik apa", "ada produk apa", "punya batik apa",
         "jual batik apa", "mau lihat", "lihat produk", "lihat koleksi",
         "batik populer", "batik bagus", "batik murah", "batik premium",
-        "show me", "looking for", "under ",
+        "show me", "looking for", "under ", "above ", "over ",
     )
 
     _PRODUCT_SPEC_WORDS = {
@@ -374,48 +379,53 @@ class HarnessPipeline:
         "what", "which", "where", "how", "why", "can", "could", "would",
         "please", "recommend", "popular", "price", "size", "about",
         "tell", "show", "looking", "want", "buy", "fabric", "shirt",
-        "the", "is", "are", "for", "under", "with",
+        "the", "is", "are", "for", "under", "above", "over", "with",
     }
     _ID_MARKERS = {
         "apa", "apakah", "ada", "aja", "saja", "yang", "ini", "itu",
         "berapa", "bagaimana", "gimana", "dimana", "dong", "kak", "ya",
         "bisa", "mau", "cari", "beli", "pesan", "harga", "ukuran",
         "bahan", "filosofi", "sejarah", "makna", "rekomendasi", "murah",
-        "bagus", "populer", "dibawah", "bawah", "toko", "sanggar",
-        "perlembar", "lembar", "meter", "untuk", "buat", "dari", "dan",
+        "bagus", "populer", "dibawah", "bawah", "diatas", "atas", "toko",
+        "sanggar", "perlembar", "lembar", "meter", "untuk", "buat", "dari",
+        "dan", "km", "kamu", "yg",
     }
 
     _STOPWORDS = {
-        "apa", "apakah", "ada", "aja", "alamat", "alamatnya", "atau",
-        "bagaimana", "bagus", "bahan", "bahannya", "barang", "bawah", "beli",
-        "benar", "bener", "bentuk", "bentuknya", "berarti", "berapa", "berat",
-        "beratnya", "betul", "bisa", "brp", "budget", "buat", "bukan",
-        "cari", "carikan", "cerita", "ceritakan", "ceritanya", "cm", "coba",
-        "daftar", "dan", "dari", "dengan", "deskripsi", "deskripsinya",
-        "detail", "di", "dibawah", "dimana", "dong", "favorit", "filosofi",
-        "filosofinya", "gak", "gimana", "gram", "harga", "harganya", "idr",
-        "info", "informasi", "ini", "itu", "iya", "jadi", "jelaskan", "jenis",
-        "jual", "juta", "jt", "k", "kah", "kak", "kalau", "kalo", "kan",
-        "kasih", "katalog", "ke", "kedua", "ketiga", "kisaran", "kok",
-        "koleksi", "kontak", "kurang", "lebar", "lebarnya", "lembar", "lihat",
-        "link", "list", "makna", "maknanya", "mana", "maksimal", "mau", "max",
-        "mengenai", "meter", "min", "minta", "motif", "motifnya", "murah",
-        "nggak", "nih", "nya", "nomor", "order", "pakai", "panjang",
+        "admin", "antara", "apa", "apakah", "ada", "aja", "alamat", "alamatnya",
+        "atas", "atau", "bagaimana", "bagus", "bahan", "bahannya", "barang",
+        "bawah", "beli", "benar", "bener", "bentuk", "bentuknya", "berarti",
+        "berapa", "berat", "beratnya", "betul", "bisa", "brp", "budget",
+        "buat", "bukan", "cari", "carikan", "cerita", "ceritakan", "ceritanya",
+        "cm", "coba", "daftar", "dan", "dana", "dari", "deh", "dengan",
+        "deskripsi", "deskripsinya", "detail", "di", "diatas", "dibawah",
+        "dimana", "dong", "enggak", "favorit", "filosofi", "filosofinya",
+        "ga", "gak", "gimana", "gk", "gram", "harga", "harganya", "hingga",
+        "idr", "info", "informasi", "ini", "itu", "iya", "jadi", "jelaskan",
+        "jenis", "jual", "juta", "jutaan", "jt", "k", "kah", "kak", "kalau",
+        "kalo", "kamu", "kan", "kasih", "katalog", "ke", "kedua", "ketiga",
+        "kisaran", "km", "kok", "koleksi", "kontak", "kurang", "lebar",
+        "lebarnya", "lebih", "lembar", "lihat", "link", "list", "makna",
+        "maknanya", "maks", "maksimal", "mana", "mau", "max", "mengenai",
+        "meter", "min", "minimal", "minta", "motif", "motifnya", "mulai",
+        "murah", "nggak", "nih", "nya", "nomor", "order", "pakai", "panjang",
         "panjangnya", "penjelasan", "penjual", "per", "perlembar", "pertama",
         "pesan", "pewarna", "pilihan", "populer", "premium", "produk",
-        "produknya", "punya", "rb", "ready", "rekom", "rekomendasi",
-        "rekomendasikan", "ribu", "rp", "saja", "sama", "sanggar", "saran",
-        "sarankan", "satuan", "saya", "sejarah", "sejarahnya", "semua",
-        "seputar", "shopee", "sih", "spek", "spesifikasi", "stok", "tadi",
-        "tanya", "teknik", "tekniknya", "tentang", "terbaik", "terlaris",
-        "tersedia", "tersebut", "tidak", "toko", "tokonya", "tokopedia",
-        "tolong", "trenggalek", "tuh", "ukuran", "ukurannya", "umkm", "untuk",
-        "wa", "whatsapp", "ya", "yah", "yang",
+        "produknya", "punya", "rb", "rban", "ready", "rekom", "rekomen",
+        "rekomendasi", "rekomendasikan", "rekomendasiin", "ribu", "ribuan",
+        "rp", "saja", "sama", "sampai", "sanggar", "saran", "sarankan",
+        "saranin", "satuan", "saya", "seharga", "sejarah", "sejarahnya",
+        "sekitar", "semua", "seputar", "shopee", "sih", "spek", "spesifikasi",
+        "stok", "tadi", "tanya", "teknik", "tekniknya", "tentang", "terbaik",
+        "terlaris", "tersedia", "tersebut", "tidak", "toko", "tokonya",
+        "tokopedia", "tolong", "trenggalek", "tuh", "ukuran", "ukurannya",
+        "umkm", "untuk", "wa", "whatsapp", "ya", "yah", "yang", "yg",
         # English filler words
-        "a", "an", "and", "are", "buy", "can", "do", "for", "give", "have",
-        "how", "i", "in", "is", "it", "looking", "me", "of", "on", "please",
-        "popular", "price", "recommend", "show", "some", "tell", "the",
-        "this", "that", "to", "under", "want", "what", "which", "with", "you",
+        "a", "above", "an", "and", "are", "around", "buy", "can", "do", "for",
+        "give", "have", "how", "i", "in", "is", "it", "looking", "me", "of",
+        "on", "over", "please", "popular", "price", "recommend", "show",
+        "some", "tell", "the", "this", "that", "to", "under", "want", "what",
+        "which", "with", "you",
     }
 
     @classmethod
@@ -432,7 +442,7 @@ class HarnessPipeline:
         s = re.sub(r"[^\w\s.,/-]", " ", s)
         s = re.sub(r"\s+", " ", s)
         return s
-    
+
     @staticmethod
     def _clean_llm_output(text: str) -> str:
         """Bersihkan artefak sitasi seperti 【DB-1】, [DB-1], [KB-2] jika masih lolos."""
@@ -443,20 +453,130 @@ class HarnessPipeline:
         return cleaned.strip()
 
     @classmethod
-    def _extract_max_harga(cls, normalized: str) -> Optional[int]:
-        m = re.search(
-            r"(?:dibawah|di bawah|max|maksimal|kurang dari|under|<)\s*(?:rp\.?\s*)?(\d+)\s*(rb|ribu|k)?",
-            normalized,
+    def _find_recommendation_tokens(cls, tokens: List[str]) -> set:
+        """Deteksi kata rekomendasi termasuk toleransi typo (misal 'rekimendasikan')."""
+        fuzzy_pool = [w for w in cls._RECOMMENDATION_WORDS if len(w) >= 6]
+        matched = set()
+        for tok in tokens:
+            if tok in cls._RECOMMENDATION_WORDS:
+                matched.add(tok)
+            elif len(tok) >= 5 and get_close_matches(tok, fuzzy_pool, n=1, cutoff=0.8):
+                matched.add(tok)
+        return matched
+
+    @staticmethod
+    def _parse_price_value(num_str: str, unit: Optional[str]) -> int:
+        if unit in ("rb", "rban", "ribu", "ribuan", "k"):
+            return int(round(float(num_str.replace(",", ".")) * 1_000))
+        if unit in ("jt", "juta", "jutaan"):
+            return int(round(float(num_str.replace(",", ".")) * 1_000_000))
+        digits = re.sub(r"[.,]", "", num_str)
+        val = int(digits)
+        return val * 1_000 if val < 1_000 else val
+
+    @staticmethod
+    def _raw_digits_int(num_str: str) -> int:
+        digits = re.sub(r"[.,]", "", num_str)
+        return int(digits) if digits.isdigit() else 0
+
+    @classmethod
+    def _extract_price_filters(
+        cls, raw_query: str
+    ) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+        """
+        Ekstrak filter harga dari query mentah.
+        Return: (min_harga, max_harga, target_harga).
+        """
+        text = (raw_query or "").lower()
+        # Buang angka ukuran/berat/jumlah agar tidak terbaca sebagai harga
+        text = re.sub(
+            r"\b\d+(?:[.,]\d+)?\s*"
+            r"(?:cm|mm|m|meter|gr|gram|kg|lembar|pcs|buah|potong|hari|jam|tahun)\b",
+            " ",
+            text,
         )
-        if not m:
-            return None
-        angka = int(m.group(1))
-        satuan = m.group(2)
-        if satuan in ("rb", "ribu", "k"):
-            angka *= 1000
-        elif satuan is None and angka < 1000:
-            angka *= 1000
-        return angka
+
+        unit_pat = r"(rban|ribuan|rb|ribu|k|jutaan|jt|juta)"
+        num_pat = (
+            r"(?:rp\.?\s*)?"
+            r"(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)"
+            rf"\s*{unit_pat}?(?=\b|[^a-z0-9]|$)"
+        )
+
+        # 1. Rentang harga: "150k - 300k", "150 - 300k", "150rb sampai 300rb", "1 - 2jt"
+        m_range = re.search(
+            rf"(?:\b(?:antara|dari)\s+)?{num_pat}\s*(?:-|sampai|hingga|s/d|sd|to)\s*{num_pat}",
+            text,
+        )
+        if m_range:
+            n1, u1, n2, u2 = m_range.group(1), m_range.group(2), m_range.group(3), m_range.group(4)
+            if u1 or u2:
+                eff_u1 = u1 or u2
+                eff_u2 = u2 or u1
+                v1 = cls._parse_price_value(n1, eff_u1)
+                v2 = cls._parse_price_value(n2, eff_u2)
+                return min(v1, v2), max(v1, v2), None
+            raw1 = cls._raw_digits_int(n1)
+            raw2 = cls._raw_digits_int(n2)
+            if max(raw1, raw2) >= 10_000:
+                v1 = cls._parse_price_value(n1, None)
+                v2 = cls._parse_price_value(n2, None)
+                return min(v1, v2), max(v1, v2), None
+
+        min_harga: Optional[int] = None
+        max_harga: Optional[int] = None
+        target_harga: Optional[int] = None
+
+        # 2. Batas bawah: "diatas 300k", "di atas 400 ribu", "minimal 300 ribuan", "> 300k"
+        m_min = re.search(
+            rf"(?:\b(?:diatas|di atas|lebih dari|minimal|min\.?|mulai dari|mulai|above|over)|>=|>)"
+            rf"\s*(?:harga\s*)?{num_pat}",
+            text,
+        )
+        if m_min:
+            n_str, u_str = m_min.group(1), m_min.group(2)
+            if u_str or cls._raw_digits_int(n_str) >= 10:
+                min_harga = cls._parse_price_value(n_str, u_str)
+
+        # 3. Batas atas: "dibawah 150k", "di bawah harga 150k", "maks 150k", "budget 150k", "< 150k"
+        m_max = re.search(
+            rf"(?:\b(?:dibawah|di bawah|max\.?|maks\.?|maksimal|kurang dari|budget|dana|under)|<=|<)"
+            rf"\s*(?:harga\s*)?{num_pat}",
+            text,
+        )
+        if m_max:
+            n_str, u_str = m_max.group(1), m_max.group(2)
+            if u_str or cls._raw_digits_int(n_str) >= 10:
+                max_harga = cls._parse_price_value(n_str, u_str)
+
+        if min_harga is not None or max_harga is not None:
+            return min_harga, max_harga, None
+
+        # 4. Harga pas / sekitar / nominal mandiri bersatuan: "seharga 150k", "batik 150k"
+        m_exact = re.search(
+            rf"\b(?:seharga|harga|harganya|sekitar|kisaran)\s*{num_pat}",
+            text,
+        )
+        if m_exact:
+            n_str, u_str = m_exact.group(1), m_exact.group(2)
+            if u_str or cls._raw_digits_int(n_str) >= 10:
+                target_harga = cls._parse_price_value(n_str, u_str)
+        else:
+            m_unit = re.search(
+                rf"(?:rp\.?\s*(\d{{1,3}}(?:[.,]\d{{3}})+|\d+(?:[.,]\d+)?)\s*{unit_pat}?"
+                rf"|\b(\d+(?:[.,]\d+)?)\s*{unit_pat})(?=\b|[^a-z0-9]|$)",
+                text,
+            )
+            if m_unit:
+                num_s = m_unit.group(1) or m_unit.group(3)
+                unit_s = m_unit.group(2) or m_unit.group(4)
+                target_harga = cls._parse_price_value(num_s, unit_s)
+
+        if target_harga is not None:
+            tol = int(target_harga * 0.15)
+            return max(0, target_harga - tol), target_harga + tol, target_harga
+
+        return None, None, None
 
     @classmethod
     def _extract_ordinal(cls, normalized: str) -> Optional[int]:
@@ -475,13 +595,17 @@ class HarnessPipeline:
         token_set = set(tokens)
         language = cls._detect_language(token_set)
 
-        max_harga = cls._extract_max_harga(normalized)
+        min_harga, max_harga, target_harga = cls._extract_price_filters(query)
+        has_price_filter = (
+            min_harga is not None or max_harga is not None or target_harga is not None
+        )
         ordinal_index = cls._extract_ordinal(normalized)
+        rec_tokens = cls._find_recommendation_tokens(tokens)
 
         wants_recommendation = (
-            bool(token_set & cls._RECOMMENDATION_WORDS)
+            bool(rec_tokens)
             or any(p in normalized for p in cls._RECOMMENDATION_PHRASES)
-            or max_harga is not None
+            or has_price_filter
         )
         is_product_spec = bool(token_set & cls._PRODUCT_SPEC_WORDS)
         is_knowledge_ask = any(sig in normalized for sig in cls._KNOWLEDGE_SIGNALS)
@@ -509,15 +633,25 @@ class HarnessPipeline:
 
         # Ekstrak kandidat keyword nama barang/toko/motif setelah bersihkan harga & ukuran
         cleaned = re.sub(
-            r"(?:dibawah|di bawah|max|maksimal|kurang dari|under|<)\s*(?:rp\.?\s*)?\d+\s*(?:rb|ribu|k)?",
+            r"\b(?:dibawah|di bawah|diatas|di atas|max|maks|maksimal|min|minimal"
+            r"|kurang dari|lebih dari|mulai dari|seharga|sekitar|kisaran|budget|dana"
+            r"|under|above|over)\s*(?:harga\s*)?(?:rp\.?\s*)?\d[\d.,]*"
+            r"\s*(?:rban|ribuan|rb|ribu|k|jutaan|jt|juta)?",
             " ",
             normalized,
         )
-        cleaned = re.sub(r"\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta)\b", " ", cleaned)
+        cleaned = re.sub(
+            r"\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rban|ribuan|rb|ribu|k|jutaan|jt|juta)\b",
+            " ",
+            cleaned,
+        )
         cleaned = re.sub(r"\b(?:rp\.?\s*)?\d{4,}\b", " ", cleaned)
         cleaned = re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:cm|mm|m|meter|gr|gram|kg)\b", " ", cleaned)
 
-        clean_tokens = [t for t in re.findall(r"[a-z0-9]+", cleaned) if t not in cls._STOPWORDS]
+        clean_tokens = [
+            t for t in re.findall(r"[a-z0-9]+", cleaned)
+            if t not in cls._STOPWORDS and t not in rec_tokens and len(t) > 1
+        ]
         specific_tokens = [t for t in clean_tokens if t not in {"batik", "kain", "produk"}]
         keyword_candidate = " ".join(clean_tokens[:4]) if specific_tokens else ""
 
@@ -533,7 +667,9 @@ class HarnessPipeline:
             is_knowledge_ask=is_knowledge_ask,
             has_back_reference=has_back_reference,
             ordinal_index=ordinal_index,
+            min_harga=min_harga,
             max_harga=max_harga,
+            target_harga=target_harga,
             keyword_candidate=keyword_candidate,
         )
 
@@ -545,6 +681,7 @@ class HarnessPipeline:
         self,
         keyword: Optional[str] = None,
         motif: Optional[str] = None,
+        min_harga: Optional[int] = None,
         max_harga: Optional[int] = None,
         limit: int = BACKEND_MAX_LIMIT,
     ) -> List[Dict]:
@@ -554,6 +691,8 @@ class HarnessPipeline:
             params["keyword"] = keyword
         if motif:
             params["motif"] = motif
+        if min_harga is not None:
+            params["min_harga"] = min_harga
         if max_harga is not None:
             params["max_harga"] = max_harga
 
@@ -578,6 +717,69 @@ class HarnessPipeline:
         except Exception:
             logger.exception("[DB] Error tak terduga saat memanggil backend")
             return []
+
+    @staticmethod
+    def _get_product_price(p: Dict) -> Optional[int]:
+        raw = p.get("harga")
+        if raw is None or raw == "":
+            raw = p.get("harga_per_meter")
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _filter_catalog_by_price(
+        cls,
+        catalog: List[Dict],
+        analysis: QueryAnalysis,
+    ) -> List[Dict]:
+        """Filter pengaman & pengurutan kedekatan harga di sisi pipeline."""
+        filtered = list(catalog)
+        if analysis.min_harga is not None:
+            filtered = [
+                p for p in filtered
+                if (price := cls._get_product_price(p)) is not None
+                and price >= analysis.min_harga
+            ]
+        if analysis.max_harga is not None:
+            filtered = [
+                p for p in filtered
+                if (price := cls._get_product_price(p)) is not None
+                and price <= analysis.max_harga
+            ]
+        if analysis.target_harga is not None:
+            filtered.sort(
+                key=lambda p: abs(
+                    (cls._get_product_price(p) or 0) - analysis.target_harga
+                )
+            )
+        return filtered
+
+    @staticmethod
+    def _format_price_filter_label(analysis: QueryAnalysis) -> str:
+        def _rp(val: int) -> str:
+            return f"Rp{int(val):,}".replace(",", ".")
+
+        if analysis.target_harga is not None:
+            if analysis.language == "en":
+                return f"around {_rp(analysis.target_harga)}"
+            return f"sekitar {_rp(analysis.target_harga)}"
+        if analysis.min_harga is not None and analysis.max_harga is not None:
+            if analysis.language == "en":
+                return f"between {_rp(analysis.min_harga)} and {_rp(analysis.max_harga)}"
+            return f"antara {_rp(analysis.min_harga)} hingga {_rp(analysis.max_harga)}"
+        if analysis.min_harga is not None:
+            if analysis.language == "en":
+                return f"above {_rp(analysis.min_harga)}"
+            return f"di atas {_rp(analysis.min_harga)}"
+        if analysis.max_harga is not None:
+            if analysis.language == "en":
+                return f"under {_rp(analysis.max_harga)}"
+            return f"di bawah {_rp(analysis.max_harga)}"
+        return ""
 
     @staticmethod
     def _has_phrase(haystack: str, needle: str) -> bool:
@@ -663,6 +865,7 @@ class HarnessPipeline:
         """
         # Ambil snapshot katalog aktif dari DB (selalu fresh, <= 20 item)
         catalog = self._fetch_products_from_backend(
+            min_harga=analysis.min_harga,
             max_harga=analysis.max_harga,
             limit=BACKEND_MAX_LIMIT,
         )
@@ -671,6 +874,7 @@ class HarnessPipeline:
         if analysis.keyword_candidate:
             direct_hits = self._fetch_products_from_backend(
                 keyword=analysis.keyword_candidate,
+                min_harga=analysis.min_harga,
                 max_harga=analysis.max_harga,
                 limit=PRODUCT_K,
             )
@@ -679,6 +883,9 @@ class HarnessPipeline:
                 for item in direct_hits:
                     if str(item.get("id")) not in seen_ids:
                         catalog.append(item)
+
+        # Terapkan filter harga pengaman di sisi pipeline
+        catalog = self._filter_catalog_by_price(catalog, analysis)
 
         if not catalog:
             return [], "none"
@@ -742,7 +949,7 @@ class HarnessPipeline:
         desc_max_chars: int = 600,
         include_shop_desc: bool = True,
     ) -> str:
-        harga_num = p.get("harga") or p.get("harga_per_meter")
+        harga_num = p.get("harga") if p.get("harga") is not None else p.get("harga_per_meter")
         harga = (
             f"Rp{int(harga_num):,}".replace(",", ".")
             if harga_num is not None and harga_num != "" else "-"
@@ -953,8 +1160,14 @@ class HarnessPipeline:
 
         # ── STEP 1: NLP Preprocessing & Analisis ────────────────────────
         analysis = self._analyze_query(query)
+        has_price_filter = (
+            analysis.min_harga is not None
+            or analysis.max_harga is not None
+            or analysis.target_harga is not None
+        )
         logger.info(
-            "[NLP] lang=%s social=%s recom=%s spec=%s know=%s backref=%s kw=%r max_harga=%s",
+            "[NLP] lang=%s social=%s recom=%s spec=%s know=%s backref=%s kw=%r "
+            "min_harga=%s max_harga=%s target_harga=%s",
             analysis.language,
             analysis.is_social,
             analysis.wants_recommendation,
@@ -962,7 +1175,9 @@ class HarnessPipeline:
             analysis.is_knowledge_ask,
             analysis.has_back_reference,
             analysis.keyword_candidate,
+            analysis.min_harga,
             analysis.max_harga,
+            analysis.target_harga,
         )
 
         # Jalur cepat untuk sapaan/social
@@ -979,9 +1194,38 @@ class HarnessPipeline:
             match_mode, len(db_products),
         )
 
+        # Jika query memakai filter harga namun tidak ada produk DB yang cocok,
+        # jangan fallback ke ChromaDB agar tidak keluar jawaban melenceng.
+        if has_price_filter and not db_products:
+            retrieval_elapsed = time.perf_counter() - t_ret
+            price_label = self._format_price_filter_label(analysis)
+            if analysis.language == "en":
+                no_match_msg = (
+                    f"Sorry, we don't have any batik products priced {price_label} "
+                    "in our catalog right now."
+                )
+            else:
+                no_match_msg = (
+                    f"Maaf, saat ini belum ada produk batik dengan harga {price_label} "
+                    "di katalog kami."
+                )
+            self._maybe_cleanup_cache()
+            return RAGResponse(
+                answer=no_match_msg,
+                intent="product",
+                sources=[],
+                processing_time=time.perf_counter() - t_start,
+                retrieval_time=retrieval_elapsed,
+            )
+
         # Cache lookup khusus pertanyaan pengetahuan murni tanpa hasil DB & tanpa back-ref
         pure_kb_cache_key = None
-        if not db_products and not analysis.has_back_reference:
+        if (
+            not db_products
+            and not analysis.has_back_reference
+            and not has_price_filter
+            and not analysis.wants_recommendation
+        ):
             pure_kb_cache_key = hashlib.md5(
                 f"kb:{analysis.language}:{analysis.normalized}".encode("utf-8")
             ).hexdigest()
@@ -1066,7 +1310,9 @@ class HarnessPipeline:
             else:
                 reranked_kb.append(rc)
 
-        reranked_db.sort(key=lambda x: x.rerank_score, reverse=True)
+        # Pertahankan urutan berbasis harga bila query murni filter harga tanpa keyword spesifik
+        if not (has_price_filter and not analysis.keyword_candidate):
+            reranked_db.sort(key=lambda x: x.rerank_score, reverse=True)
         reranked_kb.sort(key=lambda x: x.rerank_score, reverse=True)
 
         # Potong top-K sesuai mode
@@ -1149,7 +1395,7 @@ class HarnessPipeline:
         )
         answer = self._clean_llm_output(raw_answer)
         gen_elapsed = time.perf_counter() - t_gen
-        
+
         # ── STEP 6: Output + Intent & Sources untuk Frontend ────────────
         if show_cards:
             response_intent = "product"
