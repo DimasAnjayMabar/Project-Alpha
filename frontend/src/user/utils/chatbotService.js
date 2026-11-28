@@ -3,8 +3,8 @@ import { backendFetch } from '../../utils/url_controller';
 
 export const QUICK_PROMPTS = [
   'Rekomendasi batik di bawah 300rb',
-  'Rekomendasi batik Turonggo Yakso',
-  'Apa filosofi motif Turonggo Yakso?',
+  'Rekomendasi batik di toko Batik Murnia',
+  'Apa filosofi motif batik junjung drajat?',
   'Bagaimana cara merawat kain batik tulis?',
 ];
 

@@ -297,7 +297,9 @@ export default function PhysicalCatalogBookSection({
 
   const bookContainerRef = useRef(null);
   const mobileStageRef = useRef(null);
+  const pageStripRef = useRef(null);
   const suppressNextClickRef = useRef(false);
+  const suppressTimerRef = useRef(null);
   const dragStartRef = useRef({
     active: false,
     pointerId: null,
@@ -342,8 +344,18 @@ export default function PhysicalCatalogBookSection({
     backCoverPage: 0,
     isFlipping: false,
     isMobile: false,
+    hasModal: false,
   });
   const animFrameRef = useRef(null);
+
+  const markSuppressNextClick = useCallback(() => {
+    suppressNextClickRef.current = true;
+    if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current);
+    suppressTimerRef.current = setTimeout(() => {
+      suppressNextClickRef.current = false;
+      suppressTimerRef.current = null;
+    }, 320);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -371,11 +383,16 @@ export default function PhysicalCatalogBookSection({
 
   useEffect(() => {
     if (!detailModal) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKeyDown = (e) => {
       if (e.key === 'Escape') setDetailModal(null);
     };
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [detailModal]);
 
   const activeBook = useMemo(() => {
@@ -386,6 +403,10 @@ export default function PhysicalCatalogBookSection({
   useEffect(() => {
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (suppressTimerRef.current) {
+        clearTimeout(suppressTimerRef.current);
+        suppressTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -412,15 +433,15 @@ export default function PhysicalCatalogBookSection({
 
       if (isMobile) {
         const isNext = session.direction === 'next';
-        const angle = isNext ? -p * 90 : -(1 - p) * 90;
+        const angle = isNext ? -p * 82 : -(1 - p) * 82;
         const opacity = isNext
-          ? p > 0.92
-            ? Math.max(0, 1 - (p - 0.92) / 0.08)
+          ? p > 0.76
+            ? Math.max(0, 1 - (p - 0.76) / 0.24)
             : 1
-          : p < 0.08
-            ? Math.max(0, p / 0.08)
+          : p < 0.24
+            ? Math.max(0, p / 0.24)
             : 1;
-        const arch = Math.sin(Math.min(1, Math.max(0, Math.abs(angle) / 90)) * Math.PI);
+        const arch = Math.sin(Math.min(1, Math.max(0, Math.abs(angle) / 82)) * Math.PI);
 
         if (dom.mobileShadow) {
           dom.mobileShadow.style.opacity = String(isNext ? (1 - p) * 0.42 : p * 0.42);
@@ -445,6 +466,19 @@ export default function PhysicalCatalogBookSection({
         const arch = Math.sin(openAmt * Math.PI);
         if (dom.frontShift) {
           dom.frontShift.style.transform = `translateX(${-(1 - openAmt) * 25}%)`;
+        }
+        if (dom.frontBoardRight) {
+          dom.frontBoardRight.style.opacity = String(Math.min(1, openAmt / 0.45));
+        }
+        if (dom.frontBoardLeft) {
+          dom.frontBoardLeft.style.opacity = String(
+            Math.max(0, Math.min(1, (openAmt - 0.52) / 0.48))
+          );
+        }
+        if (dom.frontSpine) {
+          dom.frontSpine.style.opacity = String(
+            Math.max(0, Math.min(1, (openAmt - 0.45) / 0.55))
+          );
         }
         if (dom.frontShadow) {
           dom.frontShadow.style.opacity = String(Math.max(0, (1 - openAmt) * 0.55));
@@ -479,6 +513,21 @@ export default function PhysicalCatalogBookSection({
         const arch = Math.sin(closedAmt * Math.PI);
         if (dom.backShift) {
           dom.backShift.style.transform = `translateX(${closedAmt * 25}%)`;
+        }
+        if (dom.backBoardRight) {
+          dom.backBoardRight.style.opacity = String(
+            Math.max(0, Math.min(1, 1 - closedAmt / 0.48))
+          );
+        }
+        if (dom.backBoardLeft) {
+          dom.backBoardLeft.style.opacity = String(
+            Math.max(0, Math.min(1, 1 - Math.max(0, closedAmt - 0.55) / 0.45))
+          );
+        }
+        if (dom.backSpine) {
+          dom.backSpine.style.opacity = String(
+            Math.max(0, Math.min(1, 1 - closedAmt / 0.55))
+          );
         }
         if (dom.backShadow) {
           dom.backShadow.style.opacity = String(Math.max(0, closedAmt * 0.55));
@@ -548,14 +597,23 @@ export default function PhysicalCatalogBookSection({
       setFlipState(session);
 
       const targetProgress = completeTurn ? 1 : 0;
-      const duration = Math.max(220, Math.abs(targetProgress - startProgress) * 500);
-      const startTime = performance.now();
+      const isCoverTurn =
+        !isMobile &&
+        (fromPage === 0 || toPage === 0 || fromPage === backCoverPage || toPage === backCoverPage);
+      const baseDuration = isCoverTurn ? 600 : 480;
+      const duration = Math.max(220, Math.abs(targetProgress - startProgress) * baseDuration);
+      const fromDrag = startProgress > 0.01;
+      let startTime = null;
 
       const step = (now) => {
+        if (startTime === null) startTime = now;
         const elapsed = now - startTime;
         const rawT = Math.min(1, elapsed / duration);
-        const eased =
-          rawT < 0.5 ? 4 * rawT * rawT * rawT : 1 - Math.pow(-2 * rawT + 2, 3) / 2;
+        const eased = fromDrag
+          ? 1 - Math.pow(1 - rawT, 3)
+          : rawT < 0.5
+            ? 4 * rawT * rawT * rawT
+            : 1 - Math.pow(-2 * rawT + 2, 3) / 2;
         const currentProgress = startProgress + (targetProgress - startProgress) * eased;
         flipProgressRef.current = currentProgress;
 
@@ -564,6 +622,11 @@ export default function PhysicalCatalogBookSection({
           animFrameRef.current = requestAnimationFrame(step);
         } else {
           animFrameRef.current = null;
+          if (suppressTimerRef.current) {
+            clearTimeout(suppressTimerRef.current);
+            suppressTimerRef.current = null;
+          }
+          suppressNextClickRef.current = false;
           if (completeTurn) {
             onChangeBookPage(toPage);
           }
@@ -573,7 +636,7 @@ export default function PhysicalCatalogBookSection({
 
       animFrameRef.current = requestAnimationFrame(step);
     },
-    [applyFlipDomProgress, onChangeBookPage]
+    [isMobile, backCoverPage, applyFlipDomProgress, onChangeBookPage]
   );
 
   const triggerFlip = useCallback(
@@ -609,6 +672,11 @@ export default function PhysicalCatalogBookSection({
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
+    if (suppressTimerRef.current) {
+      clearTimeout(suppressTimerRef.current);
+      suppressTimerRef.current = null;
+    }
+    suppressNextClickRef.current = false;
     dragStartRef.current.active = false;
     dragStartRef.current.pointerId = null;
     dragStartRef.current.flip = null;
@@ -637,10 +705,23 @@ export default function PhysicalCatalogBookSection({
       backCoverPage,
       isFlipping: Boolean(flipState),
       isMobile,
+      hasModal: Boolean(detailModal),
     };
-  }, [safePage, backCoverPage, flipState, isMobile]);
+  }, [safePage, backCoverPage, flipState, isMobile, detailModal]);
 
   const hasActiveBook = Boolean(activeBook);
+
+  useEffect(() => {
+    const strip = pageStripRef.current;
+    if (!strip) return;
+    const activeBtn = strip.querySelector(`[data-page-tab="${safePage}"]`);
+    if (!activeBtn) return;
+    const targetLeft = Math.max(
+      0,
+      activeBtn.offsetLeft - (strip.clientWidth - activeBtn.offsetWidth) / 2
+    );
+    strip.scrollTo({ left: targetLeft, behavior: 'smooth' });
+  }, [safePage, selectedShopId, hasActiveBook]);
 
   // Mesin swipe native (non-passive touchmove) untuk mobile & tablet agar tidak dibajak scroll browser
   useEffect(() => {
@@ -657,7 +738,7 @@ export default function PhysicalCatalogBookSection({
 
     const onTouchStart = (e) => {
       const live = liveBookRef.current;
-      if (e.touches.length !== 1 || live.isFlipping || touchDragRef.current.active) {
+      if (e.touches.length !== 1 || live.isFlipping || live.hasModal || touchDragRef.current.active) {
         if (e.touches.length > 1) resetTouch();
         return;
       }
@@ -764,7 +845,7 @@ export default function PhysicalCatalogBookSection({
       resetTouch();
 
       if (wasLocked) {
-        suppressNextClickRef.current = true;
+        markSuppressNextClick();
       }
 
       if (!latestFlip) return;
@@ -806,7 +887,7 @@ export default function PhysicalCatalogBookSection({
       stageEl.removeEventListener('touchcancel', onTouchEndOrCancel);
       resetTouch();
     };
-  }, [isMobile, hasActiveBook, applyFlipDomProgress, animatePaperFlip]);
+  }, [isMobile, hasActiveBook, applyFlipDomProgress, animatePaperFlip, markSuppressNextClick]);
 
   const insights = useMemo(
     () => (shop ? deriveShopInsights(shop, products) : null),
@@ -942,7 +1023,7 @@ export default function PhysicalCatalogBookSection({
     }
 
     if (wasMoved) {
-      suppressNextClickRef.current = true;
+      markSuppressNextClick();
     }
 
     if (latestFlip) {
@@ -1084,7 +1165,7 @@ export default function PhysicalCatalogBookSection({
     }
 
     if (wasMoved) {
-      suppressNextClickRef.current = true;
+      markSuppressNextClick();
     }
 
     if (latestFlip) {
@@ -1122,7 +1203,13 @@ export default function PhysicalCatalogBookSection({
       }}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
-      onKeyDown={(e) => interactive && e.key === 'Enter' && triggerFlip(1)}
+      onKeyDown={(e) => {
+        if (!interactive) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          triggerFlip(1);
+        }
+      }}
       className="group relative h-full rounded-r-lg rounded-l-sm bg-[#1F1814] text-[#F5F1E8] p-4 sm:p-6 border border-[#C4A46B]/40 shadow-[14px_18px_38px_rgba(24,18,14,0.34)] cursor-pointer overflow-hidden flex flex-col justify-between"
     >
       <div className="absolute inset-y-0 left-0 w-5 bg-black/35 border-r border-[#C4A46B]/20 pointer-events-none" />
@@ -1297,13 +1384,19 @@ export default function PhysicalCatalogBookSection({
         </div>
 
         {interactive && !isMobile && (
-          <div
+          <button
+            type="button"
+            onClick={() => triggerFlip(backCoverPage - 1)}
+            aria-label="Kembali ke halaman terakhir"
+            title="Klik untuk kembali ke halaman terakhir"
             style={{
               background:
                 'linear-gradient(45deg, #D9CBB4 0%, #EFE6D5 44%, #FAF8F3 50%, rgba(0,0,0,0.3) 53%, transparent 58%)',
             }}
-            className="w-11 h-11 absolute bottom-0 left-0 opacity-85 group-hover:w-14 group-hover:h-14 transition-all pointer-events-none"
-          />
+            className="hidden lg:flex items-end justify-start p-1.5 w-12 h-12 hover:w-16 hover:h-16 absolute bottom-0 left-0 opacity-90 transition-all duration-300 cursor-pointer z-20"
+          >
+            <ChevronLeft className="w-4 h-4 text-[#7C3219]" />
+          </button>
         )}
       </div>
     );
@@ -1453,10 +1546,12 @@ export default function PhysicalCatalogBookSection({
               <p className="text-[13px] text-[#443E38] leading-relaxed font-serif line-clamp-3">
                 {storyParagraphs[0]}
               </p>
-              {hasLongStory && interactive && (
+              {hasLongStory && (
                 <button
                   type="button"
-                  onClick={() => setDetailModal({ type: 'story' })}
+                  disabled={!interactive}
+                  tabIndex={interactive ? 0 : -1}
+                  onClick={() => interactive && setDetailModal({ type: 'story' })}
                   className="text-[12px] font-medium text-[#7C3219] hover:underline underline-offset-2 cursor-pointer"
                 >
                   Baca cerita lengkap →
@@ -1682,10 +1777,12 @@ export default function PhysicalCatalogBookSection({
                     );
                   })}
                 </div>
-                {hasMoreToc && interactive && (
+                {hasMoreToc && (
                   <button
                     type="button"
-                    onClick={() => setDetailModal({ type: 'toc' })}
+                    disabled={!interactive}
+                    tabIndex={interactive ? 0 : -1}
+                    onClick={() => interactive && setDetailModal({ type: 'toc' })}
                     className="text-[12px] font-medium text-[#7C3219] hover:underline underline-offset-2 pt-0.5 cursor-pointer"
                   >
                     Lihat semua {products.length} koleksi →
@@ -1746,10 +1843,12 @@ export default function PhysicalCatalogBookSection({
               <p className="text-[13.5px] font-serif italic text-[#1C1917]/85 leading-relaxed line-clamp-4">
                 “{desc || 'Karya batik khas Kabupaten Trenggalek.'}”
               </p>
-              {hasLongDesc && interactive && (
+              {hasLongDesc && (
                 <button
                   type="button"
-                  onClick={() => setDetailModal({ type: 'product-story', product: currentProd })}
+                  disabled={!interactive}
+                  tabIndex={interactive ? 0 : -1}
+                  onClick={() => interactive && setDetailModal({ type: 'product-story', product: currentProd })}
                   className="text-[12px] font-medium text-[#7C3219] hover:underline underline-offset-2 cursor-pointer"
                 >
                   Baca filosofi lengkap →
@@ -2190,6 +2289,9 @@ export default function PhysicalCatalogBookSection({
       : 1 - initProgress
     : 0;
   const frontArch = Math.sin(frontOpenAmount * Math.PI);
+  const frontBoardRightOpacity = Math.min(1, frontOpenAmount / 0.45);
+  const frontBoardLeftOpacity = Math.max(0, Math.min(1, (frontOpenAmount - 0.52) / 0.48));
+  const frontSpineOpacity = Math.max(0, Math.min(1, (frontOpenAmount - 0.45) / 0.55));
 
   const backSpreadTarget = isBackCoverTransition
     ? flipState.toPage === backCoverPage
@@ -2202,6 +2304,12 @@ export default function PhysicalCatalogBookSection({
       : 1 - initProgress
     : 0;
   const backArch = Math.sin(backClosedAmount * Math.PI);
+  const backBoardRightOpacity = Math.max(0, Math.min(1, 1 - backClosedAmount / 0.48));
+  const backBoardLeftOpacity = Math.max(
+    0,
+    Math.min(1, 1 - Math.max(0, backClosedAmount - 0.55) / 0.45)
+  );
+  const backSpineOpacity = Math.max(0, Math.min(1, 1 - backClosedAmount / 0.55));
 
   const baseLeftSpread = isTurningBetweenSpreads
     ? flipState.direction === 'next'
@@ -2236,20 +2344,20 @@ export default function PhysicalCatalogBookSection({
     : safePage;
   const mobileLeafAngle = flipState
     ? mobileIsNext
-      ? -initProgress * 90
-      : -(1 - initProgress) * 90
+      ? -initProgress * 82
+      : -(1 - initProgress) * 82
     : 0;
   const mobileLeafOpacity = flipState
     ? mobileIsNext
-      ? initProgress > 0.92
-        ? Math.max(0, 1 - (initProgress - 0.92) / 0.08)
+      ? initProgress > 0.76
+        ? Math.max(0, 1 - (initProgress - 0.76) / 0.24)
         : 1
-      : initProgress < 0.08
-        ? Math.max(0, initProgress / 0.08)
+      : initProgress < 0.24
+        ? Math.max(0, initProgress / 0.24)
         : 1
     : 1;
   const mobileLeafArch = flipState
-    ? Math.sin((mobileIsNext ? initProgress : 1 - initProgress) * Math.PI)
+    ? Math.sin(Math.min(1, Math.max(0, Math.abs(mobileLeafAngle) / 82)) * Math.PI)
     : 0;
 
   const canGoPrev = safePage > 0;
@@ -2749,9 +2857,13 @@ export default function PhysicalCatalogBookSection({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto book-strip-scroll mb-4 pb-2.5 border-b border-[#1C1917]/12">
+          <div
+            ref={pageStripRef}
+            className="flex items-center gap-1.5 overflow-x-auto book-strip-scroll mb-4 pb-2.5 border-b border-[#1C1917]/12"
+          >
             <button
               type="button"
+              data-page-tab={0}
               disabled={Boolean(flipState)}
               onClick={() => triggerFlip(0)}
               className={`shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] text-[12.5px] font-medium border transition-colors cursor-pointer ${
@@ -2765,6 +2877,7 @@ export default function PhysicalCatalogBookSection({
 
             <button
               type="button"
+              data-page-tab={1}
               disabled={Boolean(flipState)}
               onClick={() => triggerFlip(1)}
               className={`shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] text-[12.5px] font-medium border transition-colors cursor-pointer ${
@@ -2783,6 +2896,7 @@ export default function PhysicalCatalogBookSection({
                 <button
                   key={p.id}
                   type="button"
+                  data-page-tab={pageNum}
                   disabled={Boolean(flipState)}
                   onClick={() => triggerFlip(pageNum)}
                   className={`shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] text-[12.5px] font-medium border transition-colors cursor-pointer ${
@@ -2798,6 +2912,7 @@ export default function PhysicalCatalogBookSection({
 
             <button
               type="button"
+              data-page-tab={backCoverPage}
               disabled={Boolean(flipState)}
               onClick={() => triggerFlip(backCoverPage)}
               className={`shrink-0 min-h-[36px] px-3 py-1.5 rounded-[10px] text-[12.5px] font-medium border transition-colors cursor-pointer ${
@@ -2915,184 +3030,264 @@ export default function PhysicalCatalogBookSection({
                   className="relative mx-auto select-none touch-pan-y"
                 >
               {isFrontCoverTransition ? (
-                <div
-                  ref={(el) => {
-                    flipDomRef.current.frontShift = el;
-                  }}
-                  style={{
-                    transform: `translateX(${-(1 - frontOpenAmount) * 25}%)`,
-                  }}
-                  className="relative mx-auto p-2 sm:p-2.5"
-                >
+                <div className="p-2 sm:p-2.5">
                   <div
-                    className={`book-3d-stage relative grid grid-cols-1 lg:grid-cols-2 ${BOOK_FRAME_HEIGHT}`}
+                    ref={(el) => {
+                      flipDomRef.current.frontShift = el;
+                    }}
+                    style={{
+                      willChange: 'transform',
+                      transform: `translateX(${-(1 - frontOpenAmount) * 25}%)`,
+                    }}
+                    className="relative"
                   >
-                    <div className="hidden lg:block pointer-events-none" />
-
-                    <div className="relative h-full rounded-lg lg:rounded-l-none lg:rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
-                      {renderSpreadSide(frontSpreadTarget, 'right', false)}
-                      <div
-                        ref={(el) => {
-                          flipDomRef.current.frontShadow = el;
-                        }}
-                        className="pointer-events-none absolute inset-0 z-20"
-                        style={{
-                          opacity: Math.max(0, (1 - frontOpenAmount) * 0.55),
-                          background:
-                            'linear-gradient(to right, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
-                        }}
-                      />
+                    <div
+                      ref={(el) => {
+                        flipDomRef.current.frontBoardLeft = el;
+                      }}
+                      style={{ opacity: frontBoardLeftOpacity }}
+                      className="hidden lg:block pointer-events-none absolute -top-2 sm:-top-2.5 -bottom-2 sm:-bottom-2.5 -left-2 sm:-left-2.5 right-1/2 rounded-l-lg bg-[#2B201A] border-y border-l border-[#1C1917]/25 shadow-[-8px_22px_48px_rgba(24,18,14,0.3)] z-0"
+                    >
+                      <div className="absolute inset-y-3.5 left-1.5 w-2 bg-[repeating-linear-gradient(to_right,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-l-sm shadow-inner" />
                     </div>
 
                     <div
                       ref={(el) => {
-                        flipDomRef.current.frontLeaf = el;
+                        flipDomRef.current.frontBoardRight = el;
                       }}
                       style={{
-                        left: '50%',
-                        width: '50%',
-                        transformOrigin: 'left center',
-                        transform: `rotateY(${-frontOpenAmount * 180}deg)`,
+                        opacity: frontBoardRightOpacity,
+                        left: 'calc(50% - 0.5px)',
                       }}
-                      className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
+                      className="hidden lg:block pointer-events-none absolute -top-2 sm:-top-2.5 -bottom-2 sm:-bottom-2.5 -right-2 sm:-right-2.5 rounded-r-lg bg-[#2B201A] border-y border-r border-[#1C1917]/25 shadow-[8px_22px_48px_rgba(24,18,14,0.3)] z-0"
                     >
-                      <div
-                        ref={(el) => {
-                          flipDomRef.current.frontLeafFront = el;
-                        }}
-                        style={{ visibility: frontOpenAmount >= 0.5 ? 'hidden' : 'visible' }}
-                        className="book-leaf-face absolute inset-0"
-                      >
-                        {renderFrontCoverFace(false)}
+                      <div className="absolute inset-y-3.5 right-1.5 w-2 bg-[repeating-linear-gradient(to_left,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-r-sm shadow-inner" />
+                    </div>
+
+                    <div
+                      className={`book-3d-stage relative z-10 grid grid-cols-1 lg:grid-cols-2 ${BOOK_FRAME_HEIGHT}`}
+                    >
+                      <div className="hidden lg:block pointer-events-none" />
+
+                      <div className="relative h-full lg:rounded-r-lg overflow-hidden bg-[#FAF8F3]">
+                        {renderSpreadSide(frontSpreadTarget, 'right', false)}
                         <div
                           ref={(el) => {
-                            flipDomRef.current.frontLeafFrontSheen = el;
+                            flipDomRef.current.frontShadow = el;
                           }}
-                          className="absolute inset-0 rounded-r-lg rounded-l-sm pointer-events-none"
+                          className="pointer-events-none absolute inset-0 z-20"
                           style={{
-                            opacity: frontArch * 0.65,
+                            opacity: Math.max(0, (1 - frontOpenAmount) * 0.55),
                             background:
-                              'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
+                              'linear-gradient(to right, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
                           }}
                         />
                       </div>
 
                       <div
                         ref={(el) => {
-                          flipDomRef.current.frontLeafBack = el;
+                          flipDomRef.current.frontSpine = el;
                         }}
-                        style={{ visibility: frontOpenAmount < 0.5 ? 'hidden' : 'visible' }}
-                        className="book-leaf-face book-leaf-back absolute inset-0 rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]"
+                        className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-14 z-20"
+                        style={{
+                          opacity: frontSpineOpacity,
+                          background:
+                            'linear-gradient(to right, rgba(28,25,23,0) 0%, rgba(28,25,23,0.07) 38%, rgba(24,15,10,0.22) 50%, rgba(28,25,23,0.07) 62%, rgba(28,25,23,0) 100%)',
+                        }}
+                      />
+
+                      <div
+                        ref={(el) => {
+                          flipDomRef.current.frontLeaf = el;
+                        }}
+                        style={{
+                          left: '50%',
+                          width: '50%',
+                          transformOrigin: 'left center',
+                          transform: `rotateY(${-frontOpenAmount * 180}deg)`,
+                        }}
+                        className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                       >
-                        {renderSpreadSide(frontSpreadTarget, 'left', false)}
                         <div
                           ref={(el) => {
-                            flipDomRef.current.frontLeafBackSheen = el;
+                            flipDomRef.current.frontLeafFront = el;
                           }}
-                          className="absolute inset-0 pointer-events-none"
-                          style={{
-                            opacity: frontArch * 0.6,
-                            background:
-                              'linear-gradient(270deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
+                          style={{ visibility: frontOpenAmount >= 0.5 ? 'hidden' : 'visible' }}
+                          className="book-leaf-face absolute inset-0"
+                        >
+                          {renderFrontCoverFace(false)}
+                          <div
+                            ref={(el) => {
+                              flipDomRef.current.frontLeafFrontSheen = el;
+                            }}
+                            className="absolute inset-0 rounded-r-lg rounded-l-sm pointer-events-none"
+                            style={{
+                              opacity: frontArch * 0.65,
+                              background:
+                                'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
+                            }}
+                          />
+                        </div>
+
+                        <div
+                          ref={(el) => {
+                            flipDomRef.current.frontLeafBack = el;
                           }}
-                        />
+                          style={{ visibility: frontOpenAmount < 0.5 ? 'hidden' : 'visible' }}
+                          className="book-leaf-face book-leaf-back absolute inset-0 lg:rounded-l-md overflow-hidden bg-[#FAF8F3] border-r border-[#1C1917]/12"
+                        >
+                          {renderSpreadSide(frontSpreadTarget, 'left', false)}
+                          <div
+                            ref={(el) => {
+                              flipDomRef.current.frontLeafBackSheen = el;
+                            }}
+                            className="absolute inset-0 pointer-events-none"
+                            style={{
+                              opacity: frontArch * 0.6,
+                              background:
+                                'linear-gradient(270deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               ) : isBackCoverTransition ? (
-                <div
-                  ref={(el) => {
-                    flipDomRef.current.backShift = el;
-                  }}
-                  style={{
-                    transform: `translateX(${backClosedAmount * 25}%)`,
-                  }}
-                  className="relative mx-auto p-2 sm:p-2.5"
-                >
+                <div className="p-2 sm:p-2.5">
                   <div
-                    className={`book-3d-stage relative grid grid-cols-1 lg:grid-cols-2 ${BOOK_FRAME_HEIGHT}`}
+                    ref={(el) => {
+                      flipDomRef.current.backShift = el;
+                    }}
+                    style={{
+                      willChange: 'transform',
+                      transform: `translateX(${backClosedAmount * 25}%)`,
+                    }}
+                    className="relative"
                   >
-                    <div className="relative h-full rounded-lg lg:rounded-r-none lg:rounded-l-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_20px_45px_rgba(24,18,14,0.28)]">
-                      {renderSpreadSide(backSpreadTarget, 'left', false)}
-                      <div
-                        ref={(el) => {
-                          flipDomRef.current.backShadow = el;
-                        }}
-                        className="pointer-events-none absolute inset-0 z-20"
-                        style={{
-                          opacity: Math.max(0, backClosedAmount * 0.55),
-                          background:
-                            'linear-gradient(to left, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
-                        }}
-                      />
+                    <div
+                      ref={(el) => {
+                        flipDomRef.current.backBoardLeft = el;
+                      }}
+                      style={{ opacity: backBoardLeftOpacity }}
+                      className="hidden lg:block pointer-events-none absolute -top-2 sm:-top-2.5 -bottom-2 sm:-bottom-2.5 -left-2 sm:-left-2.5 right-1/2 rounded-l-lg bg-[#2B201A] border-y border-l border-[#1C1917]/25 shadow-[-8px_22px_48px_rgba(24,18,14,0.3)] z-0"
+                    >
+                      <div className="absolute inset-y-3.5 left-1.5 w-2 bg-[repeating-linear-gradient(to_right,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-l-sm shadow-inner" />
                     </div>
-
-                    <div className="hidden lg:block pointer-events-none" />
 
                     <div
                       ref={(el) => {
-                        flipDomRef.current.backLeaf = el;
+                        flipDomRef.current.backBoardRight = el;
                       }}
                       style={{
-                        left: '0%',
-                        width: '50%',
-                        transformOrigin: 'right center',
-                        transform: `rotateY(${(1 - backClosedAmount) * 180}deg)`,
+                        opacity: backBoardRightOpacity,
+                        left: 'calc(50% - 0.5px)',
                       }}
-                      className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
+                      className="hidden lg:block pointer-events-none absolute -top-2 sm:-top-2.5 -bottom-2 sm:-bottom-2.5 -right-2 sm:-right-2.5 rounded-r-lg bg-[#2B201A] border-y border-r border-[#1C1917]/25 shadow-[8px_22px_48px_rgba(24,18,14,0.3)] z-0"
                     >
-                      <div
-                        ref={(el) => {
-                          flipDomRef.current.backLeafFront = el;
-                        }}
-                        style={{ visibility: backClosedAmount <= 0.5 ? 'hidden' : 'visible' }}
-                        className="book-leaf-face absolute inset-0"
-                      >
-                        {renderBackCoverFace(false)}
+                      <div className="absolute inset-y-3.5 right-1.5 w-2 bg-[repeating-linear-gradient(to_left,#E4DCC9_0px,#FAF8F3_1px,#D2C6B0_2px)] rounded-r-sm shadow-inner" />
+                    </div>
+
+                    <div
+                      className={`book-3d-stage relative z-10 grid grid-cols-1 lg:grid-cols-2 ${BOOK_FRAME_HEIGHT}`}
+                    >
+                      <div className="relative h-full lg:rounded-l-lg overflow-hidden bg-[#FAF8F3] border-r border-[#1C1917]/12">
+                        {renderSpreadSide(backSpreadTarget, 'left', false)}
                         <div
                           ref={(el) => {
-                            flipDomRef.current.backLeafFrontSheen = el;
+                            flipDomRef.current.backShadow = el;
                           }}
-                          className="absolute inset-0 rounded-l-lg rounded-r-sm pointer-events-none"
+                          className="pointer-events-none absolute inset-0 z-20"
                           style={{
-                            opacity: backArch * 0.65,
+                            opacity: Math.max(0, backClosedAmount * 0.55),
                             background:
-                              'linear-gradient(270deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
+                              'linear-gradient(to left, rgba(24,14,8,0.45) 0%, rgba(24,14,8,0.16) 55%, transparent 100%)',
                           }}
                         />
                       </div>
 
+                      <div className="hidden lg:block pointer-events-none" />
+
                       <div
                         ref={(el) => {
-                          flipDomRef.current.backLeafBack = el;
+                          flipDomRef.current.backSpine = el;
                         }}
-                        style={{ visibility: backClosedAmount > 0.5 ? 'hidden' : 'visible' }}
-                        className="book-leaf-face book-leaf-back absolute inset-0 rounded-r-lg overflow-hidden bg-[#FAF8F3] border border-[#1C1917]/20 shadow-[0_18px_36px_rgba(24,18,14,0.28)]"
+                        className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-14 z-20"
+                        style={{
+                          opacity: backSpineOpacity,
+                          background:
+                            'linear-gradient(to right, rgba(28,25,23,0) 0%, rgba(28,25,23,0.07) 38%, rgba(24,15,10,0.22) 50%, rgba(28,25,23,0.07) 62%, rgba(28,25,23,0) 100%)',
+                        }}
+                      />
+
+                      <div
+                        ref={(el) => {
+                          flipDomRef.current.backLeaf = el;
+                        }}
+                        style={{
+                          left: '0%',
+                          width: '50%',
+                          transformOrigin: 'right center',
+                          transform: `rotateY(${(1 - backClosedAmount) * 180}deg)`,
+                        }}
+                        className="hidden lg:block book-turning-leaf pointer-events-none absolute top-0 bottom-0 z-30"
                       >
-                        {renderSpreadSide(backSpreadTarget, 'right', false)}
                         <div
                           ref={(el) => {
-                            flipDomRef.current.backLeafBackSheen = el;
+                            flipDomRef.current.backLeafFront = el;
                           }}
-                          className="absolute inset-0 pointer-events-none"
-                          style={{
-                            opacity: backArch * 0.6,
-                            background:
-                              'linear-gradient(90deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
+                          style={{ visibility: backClosedAmount <= 0.5 ? 'hidden' : 'visible' }}
+                          className="book-leaf-face absolute inset-0"
+                        >
+                          {renderBackCoverFace(false)}
+                          <div
+                            ref={(el) => {
+                              flipDomRef.current.backLeafFrontSheen = el;
+                            }}
+                            className="absolute inset-0 rounded-l-lg rounded-r-sm pointer-events-none"
+                            style={{
+                              opacity: backArch * 0.65,
+                              background:
+                                'linear-gradient(270deg, rgba(0,0,0,0.28) 0%, rgba(255,245,220,0.28) 48%, rgba(0,0,0,0.18) 100%)',
+                            }}
+                          />
+                        </div>
+
+                        <div
+                          ref={(el) => {
+                            flipDomRef.current.backLeafBack = el;
                           }}
-                        />
+                          style={{ visibility: backClosedAmount > 0.5 ? 'hidden' : 'visible' }}
+                          className="book-leaf-face book-leaf-back absolute inset-0 lg:rounded-r-md overflow-hidden bg-[#FAF8F3]"
+                        >
+                          {renderSpreadSide(backSpreadTarget, 'right', false)}
+                          <div
+                            ref={(el) => {
+                              flipDomRef.current.backLeafBackSheen = el;
+                            }}
+                            className="absolute inset-0 pointer-events-none"
+                            style={{
+                              opacity: backArch * 0.6,
+                              background:
+                                'linear-gradient(90deg, rgba(25,15,10,0.25) 0%, rgba(255,255,255,0.35) 45%, rgba(44,36,30,0.12) 100%)',
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               ) : safePage === 0 ? (
-                <div className="w-full lg:w-1/2 mx-auto p-2 sm:p-2.5">
-                  <div className={BOOK_FRAME_HEIGHT}>{renderFrontCoverFace(true)}</div>
+                <div className="p-2 sm:p-2.5">
+                  <div className="w-full lg:w-1/2 mx-auto">
+                    <div className={BOOK_FRAME_HEIGHT}>{renderFrontCoverFace(true)}</div>
+                  </div>
                 </div>
               ) : safePage === backCoverPage ? (
-                <div className="w-full lg:w-1/2 mx-auto p-2 sm:p-2.5">
-                  <div className={BOOK_FRAME_HEIGHT}>{renderBackCoverFace(true)}</div>
+                <div className="p-2 sm:p-2.5">
+                  <div className="w-full lg:w-1/2 mx-auto">
+                    <div className={BOOK_FRAME_HEIGHT}>{renderBackCoverFace(true)}</div>
+                  </div>
                 </div>
               ) : (
                 <div className="relative rounded-lg bg-[#2B201A] p-2 sm:p-2.5 shadow-[0_24px_54px_rgba(24,18,14,0.34)] border border-[#1C1917]/25">
