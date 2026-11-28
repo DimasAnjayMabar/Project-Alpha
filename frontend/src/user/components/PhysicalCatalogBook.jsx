@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import {
   MessageCircle,
   BookOpen,
@@ -324,6 +324,25 @@ export default function PhysicalCatalogBookSection({
   });
   const flipDomRef = useRef({});
   const flipProgressRef = useRef(0);
+  const touchDragRef = useRef({
+    active: false,
+    touchId: null,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    startTime: 0,
+    lastTime: 0,
+    velocityX: 0,
+    locked: false,
+    direction: null,
+    flip: null,
+  });
+  const liveBookRef = useRef({
+    safePage: 0,
+    backCoverPage: 0,
+    isFlipping: false,
+    isMobile: false,
+  });
   const animFrameRef = useRef(null);
 
   useEffect(() => {
@@ -340,6 +359,9 @@ export default function PhysicalCatalogBookSection({
       mobileDragRef.current.active = false;
       mobileDragRef.current.pointerId = null;
       mobileDragRef.current.flip = null;
+      touchDragRef.current.active = false;
+      touchDragRef.current.touchId = null;
+      touchDragRef.current.flip = null;
       setFlipState(null);
       setIsMobile(e.matches);
     };
@@ -593,12 +615,198 @@ export default function PhysicalCatalogBookSection({
     mobileDragRef.current.active = false;
     mobileDragRef.current.pointerId = null;
     mobileDragRef.current.flip = null;
+    touchDragRef.current.active = false;
+    touchDragRef.current.touchId = null;
+    touchDragRef.current.flip = null;
     setFlipState(null);
     setCornerHover(null);
     setDetailModal(null);
     onSelectShop(shopId);
     onChangeBookPage(0);
   };
+
+  useLayoutEffect(() => {
+    if (flipState) {
+      applyFlipDomProgress(flipState, flipProgressRef.current);
+    }
+  }, [flipState, applyFlipDomProgress]);
+
+  useEffect(() => {
+    liveBookRef.current = {
+      safePage,
+      backCoverPage,
+      isFlipping: Boolean(flipState),
+      isMobile,
+    };
+  }, [safePage, backCoverPage, flipState, isMobile]);
+
+  const hasActiveBook = Boolean(activeBook);
+
+  // Mesin swipe native (non-passive touchmove) untuk mobile & tablet agar tidak dibajak scroll browser
+  useEffect(() => {
+    if (!hasActiveBook) return undefined;
+    const stageEl = isMobile ? mobileStageRef.current : bookContainerRef.current;
+    if (!stageEl) return undefined;
+
+    const resetTouch = () => {
+      touchDragRef.current.active = false;
+      touchDragRef.current.touchId = null;
+      touchDragRef.current.locked = false;
+      touchDragRef.current.flip = null;
+    };
+
+    const onTouchStart = (e) => {
+      const live = liveBookRef.current;
+      if (e.touches.length !== 1 || live.isFlipping || touchDragRef.current.active) {
+        if (e.touches.length > 1) resetTouch();
+        return;
+      }
+      if (e.target.closest('button, a, input, select')) return;
+
+      const touch = e.touches[0];
+      const now = performance.now();
+      suppressNextClickRef.current = false;
+      touchDragRef.current = {
+        active: true,
+        touchId: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        startTime: now,
+        lastTime: now,
+        velocityX: 0,
+        locked: false,
+        direction: null,
+        flip: null,
+      };
+    };
+
+    const onTouchMove = (e) => {
+      const drag = touchDragRef.current;
+      if (!drag.active) return;
+
+      const touch = Array.from(e.touches).find((t) => t.identifier === drag.touchId);
+      if (!touch) return;
+
+      const live = liveBookRef.current;
+      const dx = touch.clientX - drag.startX;
+      const dy = touch.clientY - drag.startY;
+
+      if (!drag.locked) {
+        if (Math.hypot(dx, dy) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx) * 1.45) {
+          resetTouch();
+          return;
+        }
+        const dir = dx < 0 ? 'next' : 'prev';
+        if (
+          (dir === 'next' && live.safePage >= live.backCoverPage) ||
+          (dir === 'prev' && live.safePage <= 0)
+        ) {
+          resetTouch();
+          return;
+        }
+        drag.direction = dir;
+        drag.locked = true;
+      }
+
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      const now = performance.now();
+      const dt = now - drag.lastTime;
+      if (dt > 0) {
+        const instV = (touch.clientX - drag.lastX) / dt;
+        drag.velocityX = drag.velocityX * 0.35 + instV * 0.65;
+        drag.lastX = touch.clientX;
+        drag.lastTime = now;
+      }
+
+      const rect = stageEl.getBoundingClientRect();
+      const span = live.isMobile
+        ? Math.max(170, rect.width * 0.62)
+        : Math.max(200, rect.width * 0.38);
+      const rawProgress = drag.direction === 'next' ? -dx / span : dx / span;
+      const progress = Math.max(0.02, Math.min(0.96, rawProgress));
+      const toPage = drag.direction === 'next' ? live.safePage + 1 : live.safePage - 1;
+
+      if (toPage >= 0 && toPage <= live.backCoverPage) {
+        flipProgressRef.current = progress;
+        if (!drag.flip) {
+          const nextFlip = {
+            direction: drag.direction,
+            fromPage: live.safePage,
+            toPage,
+            initialProgress: progress,
+            isDragging: true,
+          };
+          drag.flip = nextFlip;
+          setFlipState(nextFlip);
+        } else {
+          applyFlipDomProgress(drag.flip, progress);
+        }
+      }
+    };
+
+    const onTouchEndOrCancel = (e) => {
+      const drag = touchDragRef.current;
+      if (!drag.active) return;
+
+      const touch = Array.from(e.changedTouches).find((t) => t.identifier === drag.touchId);
+      if (!touch) return;
+
+      const wasLocked = drag.locked;
+      const latestFlip = drag.flip;
+      const dx = touch.clientX - drag.startX;
+      const elapsed = Math.max(performance.now() - drag.startTime, 1);
+      const lastVelocityX = drag.velocityX;
+      resetTouch();
+
+      if (wasLocked) {
+        suppressNextClickRef.current = true;
+      }
+
+      if (!latestFlip) return;
+
+      const currentProgress = flipProgressRef.current;
+      const isCancelled = e.type === 'touchcancel';
+      const signedInstVel = latestFlip.direction === 'next' ? -lastVelocityX : lastVelocityX;
+      const avgVel = Math.abs(dx) / elapsed;
+
+      if (isCancelled && currentProgress < 0.06) {
+        setFlipState(null);
+        return;
+      }
+
+      const shouldComplete =
+        !isCancelled &&
+        (currentProgress >= 0.14 ||
+          Math.abs(dx) >= 36 ||
+          (Math.abs(dx) >= 20 && (signedInstVel > 0.22 || avgVel > 0.25)));
+
+      animatePaperFlip(
+        latestFlip.direction,
+        latestFlip.fromPage,
+        latestFlip.toPage,
+        currentProgress,
+        shouldComplete
+      );
+    };
+
+    stageEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    stageEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    stageEl.addEventListener('touchend', onTouchEndOrCancel, { passive: true });
+    stageEl.addEventListener('touchcancel', onTouchEndOrCancel, { passive: true });
+
+    return () => {
+      stageEl.removeEventListener('touchstart', onTouchStart);
+      stageEl.removeEventListener('touchmove', onTouchMove);
+      stageEl.removeEventListener('touchend', onTouchEndOrCancel);
+      stageEl.removeEventListener('touchcancel', onTouchEndOrCancel);
+      resetTouch();
+    };
+  }, [isMobile, hasActiveBook, applyFlipDomProgress, animatePaperFlip]);
 
   const insights = useMemo(
     () => (shop ? deriveShopInsights(shop, products) : null),
@@ -624,9 +832,9 @@ export default function PhysicalCatalogBookSection({
       )
     : '';
 
-  // Drag handler Desktop & Tablet (swipe bebas di seluruh permukaan buku tanpa re-render per frame)
+  // Drag handler Mouse Desktop/Tablet (sentuhan jari ditangani langsung oleh listener native touch*)
   const handleBookPointerDown = (e) => {
-    if (isMobile || flipState || dragStartRef.current.active) return;
+    if (e.pointerType !== 'mouse' || isMobile || flipState || dragStartRef.current.active) return;
     suppressNextClickRef.current = false;
     if (e.target.closest('button, a, input, select')) return;
 
@@ -760,9 +968,9 @@ export default function PhysicalCatalogBookSection({
     }
   };
 
-  // Swipe drag handler Mobile (menggerakkan animasi 3D langsung tanpa re-render per frame)
+  // Drag handler Mouse pada mode 1-halaman (sentuhan jari ditangani oleh listener native touch*)
   const handleMobilePointerDown = (e) => {
-    if (!isMobile || flipState || mobileDragRef.current.active) return;
+    if (e.pointerType !== 'mouse' || !isMobile || flipState || mobileDragRef.current.active) return;
     suppressNextClickRef.current = false;
     if (e.target.closest('button, a, input, select')) return;
     const now = performance.now();
@@ -958,7 +1166,7 @@ export default function PhysicalCatalogBookSection({
 
         <div className="text-center space-y-2.5">
           <p className="text-[13px] sm:text-[13.5px] text-[#F5F1E8]/90 font-serif italic tabular-nums">
-            {products.length} koleksi aktif
+            {products.length} koleksi
             {products.length > 0 && ` · Mulai ${formatRupiah(minShopPrice)}`}
           </p>
           <div className="inline-flex items-center justify-center gap-2 min-h-[42px] px-5 py-2 rounded-[10px] bg-[#FCFBF8] group-hover:bg-[#EFEAE0] text-[#1C1917] text-[13.5px] font-medium transition-colors">
